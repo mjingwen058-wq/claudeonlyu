@@ -18,7 +18,7 @@
       this.params = {
         gain: 1, // 输入增益（线性）
         onsetK: 1.6, // 起音阈值 = 均值 + K × 标准差
-        gate: 0.08, // 静音门限（归一化 RMS）
+        gate: 0.08, // 底噪电平（归一化 RMS，0~1 对应 -60~-6 dBFS）；开麦时自动测
         attack: 0.55, // 频带上升平滑
         release: 0.12, // 频带下降平滑
         bpmAuto: true,
@@ -32,6 +32,7 @@
         bpm: 120, bpmConf: 0, phase: 0, beat: false, beatCount: 0, bar: 0, barStart: false,
         energyFast: 0, energyMid: 0, energySlow: 0,
         state: 'SILENT', stateTime: 0,
+        aboveDb: 0, // 比底噪高出多少 dB
         presence: 0, // 有没有声音：0 = 安静，1 = 有声音。画面所有动作都乘它
         calibrating: false,
         bands: new Float32Array(NB),
@@ -76,6 +77,8 @@
         this.prevLog = new Float32Array(n);
         this.timeData = new Float32Array(this.analyser.fftSize);
         this._buildBands();
+        this.rawBands = new Float32Array(NB);
+        this.floorBands = new Float32Array(NB);
       }
       if (this.ctx.state === 'suspended') await this.ctx.resume();
       this.inputGain.gain.value = this.params.gain;
@@ -164,13 +167,16 @@
         track.onended = () => (this.diag.ended = true);
       }
       this.diag.since = performance.now();
-      this._calib = { t: 0, max: 0 }; // 开麦后先听 2 秒底噪，自动设静音门限
+      this._calib = { t: 0, max: 0, bands: new Float32Array(NB) }; // 开麦后先听 2 秒底噪
       this.mode = 'mic';
       this.emit('source', this.mode);
     }
 
     /* 重新校准底噪（保持安静 2 秒） */
-    recalibrate() { if (this.mode === 'mic') this._calib = { t: 0, max: 0 }; }
+    recalibrate() { if (this.mode === 'mic') this._calib = { t: 0, max: 0, bands: new Float32Array(NB) }; }
+
+    /* 演示信号和音频文件没有环境噪音：底噪清零 */
+    _resetFloor() { if (this.floorBands) this.floorBands.fill(0); this.params.gate = 0.08; this._calib = null; this.emit('floor', this.params.gate); }
 
     async useFile(file) {
       await this.ensureCtx();
@@ -183,6 +189,7 @@
       this.source = this.ctx.createMediaElementSource(el);
       this.source.connect(this.inputGain);
       this.source.connect(this.ctx.destination); // 监听
+      this._resetFloor();
       await el.play();
       this.mode = 'file';
       this.emit('source', this.mode);
@@ -191,6 +198,7 @@
     async useDemo() {
       await this.ensureCtx();
       this.stop();
+      this._resetFloor();
       this.demo = new SF.DemoSynth(this.ctx, this.inputGain);
       this.demo.start();
       this.mode = 'demo';
@@ -240,47 +248,63 @@
       for (let i = 0; i < td.length; i++) pk = Math.max(pk, Math.abs(td[i]));
       const pkDb = 20 * Math.log10(pk / Math.max(P0.gain, 1e-3) + 1e-9);
       this.diag.peakDb = Math.max(pkDb, this.diag.peakDb - dt * 30); // 峰值保持，每秒回落 30dB
-      const rmsN = clamp((20 * Math.log10(rmsLin + 1e-9) + 60) / 54);
-      f.rms = ema(f.rms, rmsN, dt, rmsN > f.rms ? 0.03 : 0.12);
+      const rmsN = clamp((20 * Math.log10(rmsLin + 1e-9) + 60) / 54); // 0~1 对应 -60~-6 dBFS
+      this._rmsRaw = ema(this._rmsRaw || 0, rmsN, dt, rmsN > (this._rmsRaw || 0) ? 0.03 : 0.12);
 
-      // 底噪校准：开麦后 2 秒内记录最大电平，门限设在它上面一点
-      if (this._calib && this.mode === 'mic') {
-        this._calib.t += dt;
-        this._calib.max = Math.max(this._calib.max, rmsN);
-        f.calibrating = true;
-        if (this._calib.t > 2) {
-          // 测底噪时如果已经有明显的声音（比如音乐已经在放），门限最多设到 0.35，并提示重新校准
-          const noisy = this._calib.max > 0.3;
-          this.params.gate = clamp(this._calib.max + 0.06, 0.05, 0.35);
-          this._calib = null;
-          f.calibrating = false;
-          this.emit('calibrated', this.params.gate, noisy);
-        }
-      } else f.calibrating = false;
-
-      // 存在感：超过门限才算“有声音”；上升 50ms、回落 1.2 秒
-      const over = clamp((rmsN - this.params.gate) / 0.12);
-      const presT = f.calibrating ? 0 : over * over * (3 - 2 * over);
-      f.presence = ema(f.presence, presT, dt, presT > f.presence ? 0.05 : 1.2);
-
-      // 波形（256 点降采样，给唱片隧道用）
-      const step = td.length / 256;
-      for (let i = 0; i < 256; i++) f.wave[i] = td[Math.floor(i * step)];
-
-      // —— 线性幅度 ——
+      // —— 频带原始值（未扣底噪），64 带对数分布 ——
       for (let i = 0; i < n; i++) this.mag[i] = Math.pow(10, this.freqDb[i] / 20);
-
-      // —— 频带：64 带对数分布 ——
-      const P = this.params;
+      const P = this.params, raw = this.rawBands;
       for (let b = 0; b < NB; b++) {
         let acc = 0;
         const lo = this.bandLo[b], hi = this.bandHi[b];
         for (let i = lo; i < hi; i++) acc += this.mag[i] * this.mag[i];
         const db = 10 * Math.log10(acc / (hi - lo) + 1e-12) + this.bandTilt[b];
         const v = clamp((db + 85) / 60);
-        const k = v > f.bands[b] ? P.attack : P.release;
-        f.bands[b] += (v - f.bands[b]) * k;
+        raw[b] += (v - raw[b]) * (v > raw[b] ? P.attack : P.release);
       }
+
+      // —— 底噪校准：开麦后 2 秒内记录整体电平和每个频带的最大值，作为底噪 ——
+      if (this._calib && this.mode === 'mic') {
+        const c = this._calib;
+        c.t += dt;
+        if (c.t > 0.3) { // 前 0.3 秒是麦克风启动的过渡，跳过
+          c.max = Math.max(c.max, this._rmsRaw);
+          for (let b = 0; b < NB; b++) c.bands[b] = Math.max(c.bands[b], raw[b]);
+        }
+        f.calibrating = true;
+        if (c.t > 2.3) {
+          P.gate = c.max;
+          this.floorBands.set(c.bands);
+          this._calib = null;
+          f.calibrating = false;
+          this.emit('calibrated', P.gate, P.gate > 0.45);
+        }
+      } else f.calibrating = false;
+
+      // —— 扣掉底噪：画面只看“比底噪高出多少” ——
+      f.aboveDb = f.calibrating ? 0 : Math.max(0, (this._rmsRaw - P.gate) * 54);
+      // 底噪已经扣成 0，所以可以放心把“高出底噪”的部分按最近 10 秒的峰值拉满：
+      // 安静 = 0；哪怕音乐只比环境响几 dB，也能把画面推满
+      this._abovePk = Math.max(f.aboveDb, (this._abovePk || 0) * Math.exp(-dt / 10), 8);
+      f.rms = clamp(f.aboveDb / this._abovePk);
+      const fb = this.floorBands, sub = this._sub || (this._sub = new Float32Array(NB));
+      let smax = 0;
+      for (let b = 0; b < NB; b++) {
+        sub[b] = f.calibrating ? 0 : Math.max(0, raw[b] - fb[b] - 0.02);
+        smax = Math.max(smax, sub[b]);
+      }
+      this._bandPk = Math.max(smax, (this._bandPk || 0) * Math.exp(-dt / 10), 0.12);
+      for (let b = 0; b < NB; b++) f.bands[b] = clamp(sub[b] / this._bandPk);
+
+      // 存在感：比底噪高 2dB 开始出现，高 7dB 完全展开；上升 50ms、回落 1.2 秒
+      const over = clamp((f.aboveDb - 2) / 5);
+      const presT = over * over * (3 - 2 * over);
+      f.presence = ema(f.presence, presT, dt, presT > f.presence ? 0.05 : 1.2);
+
+      // 波形（256 点降采样，给唱片隧道用）
+      const step = td.length / 256;
+      for (let i = 0; i < 256; i++) f.wave[i] = td[Math.floor(i * step)];
+
       const bandAvg = (fLo, fHi) => {
         let a = 0, c = 0;
         for (let b = 0; b < NB; b++) if (this.bandFc[b] >= fLo && this.bandFc[b] < fHi) { a += f.bands[b]; c++; }
@@ -299,7 +323,7 @@
         num += i * this.binHz * m; den += m;
         logSum += Math.log(m); cnt++;
       }
-      const silent = rmsN < P.gate;
+      const silent = f.aboveDb < 3;
       const centroidHz = den > 0 ? num / den : 0;
       const cN = clamp((Math.log2(Math.max(centroidHz, 1)) - Math.log2(150)) / (Math.log2(8000) - Math.log2(150)));
       const flat = cnt ? Math.exp(logSum / cnt) / (den / cnt) : 0;
@@ -408,7 +432,7 @@
       this._onsetRate = ema(this._onsetRate || 0, (this._onsetCount || 0) / Math.max(dt, 1e-3), dt, 3);
       this._onsetCount = 0;
       f.onsetRate = this._onsetRate;
-      this._silence = f.rms < P.gate ? this._silence + dt : 0;
+      this._silence = f.presence < 0.15 ? this._silence + dt : 0;
 
       let cand;
       if (this._silence > 1.5) cand = 'SILENT';

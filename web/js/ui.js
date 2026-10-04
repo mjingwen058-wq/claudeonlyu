@@ -90,7 +90,7 @@
   }
   bindRange('gain', () => audio.params.gain, (v) => audio.setGain(v), (v) => `${(20 * Math.log10(v)).toFixed(1)} dB`);
   bindRange('onsetK', () => audio.params.onsetK, (v) => (audio.params.onsetK = v));
-  bindRange('gate', () => audio.params.gate, (v) => (audio.params.gate = v));
+  bindRange('gate', () => audio.params.gate, (v) => (audio.params.gate = v), (v) => `${(v * 54 - 60).toFixed(0)} dB`);
   bindRange('dropLow', () => audio.params.dropLow, (v) => (audio.params.dropLow = v));
   bindRange('dropHigh', () => audio.params.dropHigh, (v) => (audio.params.dropHigh = v));
   bindRange('zDepth', () => M.zDepth, (v) => (M.zDepth = v));
@@ -125,18 +125,28 @@
 
   // —— 底噪校准 ——
   $('btn-calib').onclick = () => { audio.recalibrate(); msg('正在测底噪，请保持安静 2 秒…'); };
+  const setGateUI = (g) => { const el = $('gate'); el.value = g; el.dispatchEvent(new Event('input')); };
+  audio.on('floor', setGateUI);
   audio.on('calibrated', (g, noisy) => {
-    const el = $('gate'); el.value = g; el.dispatchEvent(new Event('input'));
-    msg(noisy
-      ? `测底噪时已经有声音了，静音门限先设为 ${g.toFixed(2)}。想要更准，请先把音乐停掉，再点“重新校准底噪”。`
-      : `底噪测好了，静音门限设为 ${g.toFixed(2)}。现在可以放音乐或说话了。`);
+    setGateUI(g);
+    const db = (g * 54 - 60).toFixed(0);
+    let text = noisy
+      ? `底噪测得 ${db} dB，偏响。如果测的时候音乐已经在放，请先停掉音乐，再点“重新校准底噪”。`
+      : `底噪测好了：${db} dB。之后只有比它响的声音才会让画面动起来，现在可以放音乐了。`;
+    // 浏览器强制开着自动增益/降噪时，响和不响的差别会被压小
+    const tr = audio.stream && audio.stream.getAudioTracks()[0];
+    const st = tr && tr.getSettings ? tr.getSettings() : {};
+    if (st.autoGainControl === true || st.noiseSuppression === true) {
+      text += ' 注意：这个浏览器强制开着自动增益或降噪，会把大小声的差别压小，建议换 Chrome 打开。';
+    }
+    msg(text, noisy);
   });
 
   // —— 诊断记录：每 0.25 秒记一次，保留最近 10 秒，点按钮生成可以复制的报告 ——
   const samples = [];
   let sampleAcc = 0;
   function record(f) {
-    samples.push({ db: +audio.diag.peakDb.toFixed(1), rms: +f.rms.toFixed(3), pres: +f.presence.toFixed(2),
+    samples.push({ db: +audio.diag.peakDb.toFixed(1), above: +f.aboveDb.toFixed(1), rms: +f.rms.toFixed(3), pres: +f.presence.toFixed(2),
       low: +f.low.toFixed(2), mid: +f.mid.toFixed(2), high: +f.high.toFixed(2), on: +f.onset.toFixed(2) });
     if (samples.length > 40) samples.shift();
   }
@@ -161,7 +171,8 @@
       ctx: audio.ctx ? { state: audio.ctx.state, sampleRate: audio.ctx.sampleRate } : null,
       track: tr ? { label: tr.label, readyState: tr.readyState, muted: tr.muted, enabled: tr.enabled, settings } : null,
       gain: audio.params.gate !== undefined ? { gain: audio.params.gain, gate: audio.params.gate } : null,
-      last10s: { peakDb: stat('db'), rms: stat('rms'), presence: stat('pres'), low: stat('low'), mid: stat('mid'), high: stat('high'), onset: stat('on') },
+      floorDb: +(audio.params.gate * 54 - 60).toFixed(1),
+      last10s: { peakDb: stat('db'), aboveFloorDb: stat('above'), rms: stat('rms'), presence: stat('pres'), low: stat('low'), mid: stat('mid'), high: stat('high'), onset: stat('on') },
       state: audio.f.state, bpm: +audio.f.bpm.toFixed(1),
       lastMessage: $('msg').textContent,
     };
@@ -229,7 +240,7 @@
       $('lvl').style.transform = `scaleX(${Math.max(0, Math.min(1, (db + 90) / 90))})`;
       $('lvl-v').textContent = db <= -119 ? '—' : `${db.toFixed(0)} dB`;
       const ctxState = audio.ctx ? `${audio.ctx.state} · ${audio.ctx.sampleRate}Hz` : '还没有输入';
-      const tag = f.calibrating ? ' · 正在测底噪' : dg.muted ? ' · 系统把麦克风静音了' : dg.ended ? ' · 麦克风断开了' : ` · 有声音 ${Math.round(f.presence * 100)}%`;
+      const tag = f.calibrating ? ' · 正在测底噪，请保持安静' : dg.muted ? ' · 系统把麦克风静音了' : dg.ended ? ' · 麦克风断开了' : ` · 比底噪高 ${f.aboveDb.toFixed(0)} dB · 有声音 ${Math.round(f.presence * 100)}%`;
       $('diag-text').textContent = (audio.mode === 'mic' ? `${dg.label || '麦克风'} · ${ctxState}` : ctxState) + (audio.mode === 'none' ? '' : tag);
       const deaf = audio.mode === 'mic' && performance.now() - dg.since > 3000 && dg.peakDb < -85;
       if (deaf && !this._deafShown) {
