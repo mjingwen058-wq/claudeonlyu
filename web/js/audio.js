@@ -17,6 +17,7 @@
       this.mode = 'none';
       this.params = {
         gain: 1, // 输入增益（线性）
+        sens: 1.5, // 灵敏度：越大越容易判定“有声音”
         onsetK: 1.6, // 起音阈值 = 均值 + K × 标准差
         gate: 0.08, // 底噪电平（归一化 RMS，0~1 对应 -60~-6 dBFS）；开麦时自动测
         attack: 0.55, // 频带上升平滑
@@ -282,22 +283,30 @@
       } else f.calibrating = false;
 
       // —— 扣掉底噪：画面只看“比底噪高出多少” ——
-      f.aboveDb = f.calibrating ? 0 : Math.max(0, (this._rmsRaw - P.gate) * 54);
-      // 底噪已经扣成 0，所以可以放心把“高出底噪”的部分按最近 10 秒的峰值拉满：
-      // 安静 = 0；哪怕音乐只比环境响几 dB，也能把画面推满
-      this._abovePk = Math.max(f.aboveDb, (this._abovePk || 0) * Math.exp(-dt / 10), 8);
-      f.rms = clamp(f.aboveDb / this._abovePk);
+      // 两种“高出底噪”取较大的：整体音量高出多少，以及最突出的几个频段各自高出多少
+      // （人声只集中在 200~3000Hz，整体音量可能只涨 1~2dB，但那几个频段会明显高出）
+      const levelAbove = f.calibrating ? 0 : Math.max(0, (this._rmsRaw - P.gate) * 54);
       const fb = this.floorBands, sub = this._sub || (this._sub = new Float32Array(NB));
       let smax = 0;
       for (let b = 0; b < NB; b++) {
         sub[b] = f.calibrating ? 0 : Math.max(0, raw[b] - fb[b] - 0.02);
         smax = Math.max(smax, sub[b]);
       }
-      this._bandPk = Math.max(smax, (this._bandPk || 0) * Math.exp(-dt / 10), 0.12);
+      const top = Array.from(sub).sort((a, b) => b - a).slice(0, 6);
+      const bandAbove = (top.reduce((a, b) => a + b, 0) / top.length) * 60; // 频带刻度 1 = 60dB
+      this.diag.levelAbove = levelAbove;
+      this.diag.bandAbove = bandAbove;
+      f.aboveDb = Math.max(levelAbove, bandAbove);
+      // 底噪已经扣成 0，所以可以放心把“高出底噪”的部分按最近 10 秒的峰值拉满：
+      // 安静 = 0；哪怕声音只比环境响几 dB，也能把画面推满
+      this._abovePk = Math.max(f.aboveDb, (this._abovePk || 0) * Math.exp(-dt / 10), 8);
+      f.rms = clamp(f.aboveDb / this._abovePk);
+      this._bandPk = Math.max(smax, (this._bandPk || 0) * Math.exp(-dt / 10), 0.1);
       for (let b = 0; b < NB; b++) f.bands[b] = clamp(sub[b] / this._bandPk);
 
-      // 存在感：比底噪高 2dB 开始出现，高 7dB 完全展开；上升 50ms、回落 1.2 秒
-      const over = clamp((f.aboveDb - 2) / 5);
+      // 存在感：灵敏度 1.5 时，高出底噪约 1.3dB 开始出现、约 4.7dB 完全展开；上升 50ms、回落 1.2 秒
+      const sens = Math.max(0.2, P.sens);
+      const over = clamp((f.aboveDb - 2 / sens) / (5 / sens));
       const presT = over * over * (3 - 2 * over);
       f.presence = ema(f.presence, presT, dt, presT > f.presence ? 0.05 : 1.2);
 

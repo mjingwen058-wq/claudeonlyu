@@ -90,6 +90,7 @@
   }
   bindRange('gain', () => audio.params.gain, (v) => audio.setGain(v), (v) => `${(20 * Math.log10(v)).toFixed(1)} dB`);
   bindRange('onsetK', () => audio.params.onsetK, (v) => (audio.params.onsetK = v));
+  bindRange('sens', () => audio.params.sens, (v) => (audio.params.sens = v), (v) => `${v.toFixed(1)}×`);
   bindRange('gate', () => audio.params.gate, (v) => (audio.params.gate = v), (v) => `${(v * 54 - 60).toFixed(0)} dB`);
   bindRange('dropLow', () => audio.params.dropLow, (v) => (audio.params.dropLow = v));
   bindRange('dropHigh', () => audio.params.dropHigh, (v) => (audio.params.dropHigh = v));
@@ -146,7 +147,8 @@
   const samples = [];
   let sampleAcc = 0;
   function record(f) {
-    samples.push({ db: +audio.diag.peakDb.toFixed(1), above: +f.aboveDb.toFixed(1), rms: +f.rms.toFixed(3), pres: +f.presence.toFixed(2),
+    samples.push({ db: +audio.diag.peakDb.toFixed(1), above: +f.aboveDb.toFixed(1),
+      lvlAb: +(audio.diag.levelAbove || 0).toFixed(1), bandAb: +(audio.diag.bandAbove || 0).toFixed(1), rms: +f.rms.toFixed(3), pres: +f.presence.toFixed(2),
       low: +f.low.toFixed(2), mid: +f.mid.toFixed(2), high: +f.high.toFixed(2), on: +f.onset.toFixed(2) });
     if (samples.length > 40) samples.shift();
   }
@@ -172,8 +174,10 @@
       track: tr ? { label: tr.label, readyState: tr.readyState, muted: tr.muted, enabled: tr.enabled, settings } : null,
       gain: audio.params.gate !== undefined ? { gain: audio.params.gain, gate: audio.params.gate } : null,
       floorDb: +(audio.params.gate * 54 - 60).toFixed(1),
-      last10s: { peakDb: stat('db'), aboveFloorDb: stat('above'), rms: stat('rms'), presence: stat('pres'), low: stat('low'), mid: stat('mid'), high: stat('high'), onset: stat('on') },
+      sens: audio.params.sens,
+      last10s: { peakDb: stat('db'), aboveFloorDb: stat('above'), levelAboveDb: stat('lvlAb'), bandAboveDb: stat('bandAb'), rms: stat('rms'), presence: stat('pres'), low: stat('low'), mid: stat('mid'), high: stat('high'), onset: stat('on') },
       state: audio.f.state, bpm: +audio.f.bpm.toFixed(1),
+      timeline: samples.filter((_, i) => i % 2 === 0).map((x) => `${x.db}/${x.lvlAb}/${x.bandAb}/${x.pres}`).join(' '),
       lastMessage: $('msg').textContent,
     };
     const text = JSON.stringify(report);
@@ -250,6 +254,14 @@
         this._deafShown = false;
         msg('收到声音了。');
       }
+      const badge = $('input-badge');
+      badge.dataset.mode = audio.mode;
+      badge.textContent = {
+        none: '输入 · 无（点右侧“麦克风”开始）',
+        mic: f.calibrating ? '输入 · 麦克风 · 正在测底噪，请安静' : `输入 · 麦克风 · 比底噪高 ${f.aboveDb.toFixed(0)} dB`,
+        demo: '输入 · 演示信号（没有用麦克风）',
+        file: '输入 · 音频文件（没有用麦克风）',
+      }[audio.mode];
       $('src').textContent = { none: '无输入', mic: '麦克风', file: '音频文件', demo: '演示信号' }[audio.mode];
     },
   };
