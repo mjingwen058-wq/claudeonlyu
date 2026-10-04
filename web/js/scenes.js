@@ -1,9 +1,9 @@
-/* 五个 3D 场景，各对应一张参考图
- * A Glyph Field   字形场   ← 参考图 1  K/M 字符矩阵
- * B Halftone Vol  半调体   ← 参考图 2  灰阶圆点
- * C Groove Tunnel 唱片隧道 ← 参考图 4  同心圆切字
- * D Stroke Flow   笔触流   ← 参考图 3  粗描边笔触
- * E Scribble Nest 涂鸦巢   ← 参考图 5  乱线和中心黑点
+/* 五个 3D 场景（池田亮司式的纯黑白数据美学 + 保留线性元素）
+ * A Barcode Stack 条码层   测试图式竖条码沿 Z 轴排开
+ * B Data Terrain  数据地形 点和细线组成的 3D 频谱瀑布
+ * C Wave Tunnel   波形隧道 ← 参考图 4 同心圆
+ * D Stroke Flow   笔触流   ← 参考图 3 粗描边笔触
+ * E Scribble Nest 涂鸦巢   ← 参考图 5 乱线和中心黑点
  * 所有场景统一用 uFade（0~1）做淡入淡出：缩小或稀疏，不用透明度，保持纯黑白
  */
 (function () {
@@ -61,83 +61,67 @@
     }
   }
 
-  function glyphAtlas() {
-    // 4 格：K 常规 / M 常规 / K 粗 / M 粗
-    const c = document.createElement('canvas');
-    c.width = 512; c.height = 128;
-    const g = c.getContext('2d');
-    g.fillStyle = '#fff';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    const fam = '"Helvetica Neue", Helvetica, Arial, sans-serif';
-    ['K', 'M', 'K', 'M'].forEach((ch, i) => {
-      g.font = `${i < 2 ? 500 : 800} 104px ${fam}`;
-      g.fillText(ch, i * 128 + 64, 70);
-    });
-    const t = new THREE.CanvasTexture(c);
-    t.minFilter = THREE.LinearMipMapLinearFilter;
-    return t;
-  }
+  const HASH = `float h1(float n){ return fract(sin(n*127.1)*43758.5453); }`;
 
-  /* ———————————————— A 字形场 ———————————————— */
-  class GlyphField {
+  /* ———————————————— A 条码层 Barcode Stack ————————————————
+   * 池田亮司 test pattern 的思路：一层层纯白竖条码沿 Z 轴排开
+   * 每层 = 声音历史里的一行（越深越旧）；每列 = 一段频率，越响条码越密
+   * 条码图样每拍重洗一次；噪声度越高，竖条被切成越碎的片段 */
+  class BarcodeStack {
     constructor(hist) {
-      this.name = 'A 字形场 Glyph Field';
+      this.name = 'A 条码层 Barcode Stack';
+      const NL = 28;
       const base = new THREE.PlaneGeometry(1, 1);
       const geo = new THREE.InstancedBufferGeometry();
       geo.index = base.index;
       geo.setAttribute('position', base.getAttribute('position'));
       geo.setAttribute('uv', base.getAttribute('uv'));
-      const rows = 48, N = NB * rows;
-      const cell = new Float32Array(N * 2), rnd = new Float32Array(N);
-      for (let j = 0, k = 0; j < rows; j++) for (let i = 0; i < NB; i++, k++) {
-        cell[k * 2] = i; cell[k * 2 + 1] = j; rnd[k] = Math.random();
-      }
-      geo.setAttribute('aCell', new THREE.InstancedBufferAttribute(cell, 2));
-      geo.setAttribute('aRand', new THREE.InstancedBufferAttribute(rnd, 1));
-      geo.instanceCount = N;
+      const layer = new Float32Array(NL);
+      for (let i = 0; i < NL; i++) layer[i] = i;
+      geo.setAttribute('aLayer', new THREE.InstancedBufferAttribute(layer, 1));
+      geo.instanceCount = NL;
       this.u = {
-        uHist: { value: hist.tex }, uAtlas: { value: glyphAtlas() },
-        uTime: { value: 0 }, uFade: { value: 0 }, uChaos: { value: 0 }, uLow: { value: 0 },
-        uHigh: { value: 0 }, uDensity: { value: 0.5 }, uDepth: { value: 1 }, uOnset: { value: 0 },
+        uHist: { value: hist.tex }, uFade: { value: 0 }, uSeed: { value: 0 }, uDepth: { value: 1 },
+        uLow: { value: 0 }, uHigh: { value: 0 }, uFlat: { value: 0 }, uDensity: { value: 0.5 }, uNL: { value: NL },
       };
       const mat = new THREE.ShaderMaterial({
         uniforms: this.u,
         vertexShader: `
-          uniform sampler2D uHist; uniform float uTime, uFade, uChaos, uLow, uHigh, uDensity, uDepth, uOnset;
-          attribute vec2 aCell; attribute float aRand;
-          varying vec2 vUv; varying float vGlyph;
+          uniform float uFade, uDepth, uLow, uNL;
+          attribute float aLayer; varying vec2 vUv; varying float vLayer;
           void main(){
-            vec4 h = texture2D(uHist, vec2((aCell.x+.5)/64., (aCell.y+.5)/64.));
-            float a = h.r;
-            // 密度：响度越大，亮着的格子越多（参考图 1 的上密下疏）
-            float on = step(1.0 - uDensity, a + aRand*0.25);
-            float size = (0.18 + a*0.95) * on * uFade;
-            // 高频：小字闪烁
-            size *= 1.0 - uHigh*step(0.82, fract(aRand*91.7 + uTime*6.0));
-            vec3 p = vec3((aCell.x-31.5)*0.30, (a*a*2.6 - 0.9), -aCell.y*0.32*uDepth);
-            // 低频：最新的几行沿 Z 冲出来
-            p.z += uLow*2.2*exp(-aCell.y*0.12);
-            p.y += uLow*0.6*exp(-aCell.y*0.2)*sin(aCell.x*0.4);
-            // 平坦度（噪声度）：网格解体
-            p += uChaos * 2.0 * vec3(sin(aRand*40.+uTime*1.3+aCell.y*.2), cos(aRand*33.+uTime*1.1+aCell.x*.1), sin(aRand*17.+uTime*.7));
-            vec4 mv = modelViewMatrix * vec4(p, 1.0);
-            mv.xy += position.xy * size * 0.34;
-            gl_Position = projectionMatrix * mv;
-            vUv = uv;
-            // 质心：亮 → K，暗 → M；幅度大 → 粗体；起音时整行洗牌
-            float g = step(0.45, h.g + (aRand-.5)*0.3 + h.a*step(.5,aRand)*.6);
-            g = mod(g + step(0.62, a)*2.0, 4.0);
-            vGlyph = g;
+            vUv = uv; vLayer = aLayer;
+            vec3 p = vec3(position.x * 10.0, position.y * 5.0 * uFade, 0.0);
+            p.z = 3.0 - aLayer * 0.42 * uDepth + uLow * 1.2 * exp(-aLayer * 0.35);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
           }`,
-        fragmentShader: `
-          uniform sampler2D uAtlas; varying vec2 vUv; varying float vGlyph;
+        fragmentShader: HASH + `
+          uniform sampler2D uHist; uniform float uSeed, uHigh, uFlat, uDensity, uNL, uFade;
+          varying vec2 vUv; varying float vLayer;
           void main(){
-            float a = texture2D(uAtlas, vec2((vGlyph + vUv.x)/4.0, vUv.y)).a;
-            if (a < 0.5) discard;
+            if (uFade < 0.01) discard;
+            float row = vLayer * 2.0;
+            float cols = 240.0;
+            float c = floor(vUv.x * cols);
+            float amp = texture2D(uHist, vec2((floor(c / cols * 64.0) + 0.5) / 64.0, (row + 0.5) / 64.0)).r;
+            float seed = uSeed * 17.0 + vLayer * 3.7;
+            float on = step(h1(c * 1.37 + seed), amp * amp * amp * (0.25 + uDensity * 0.6));
+            // 每根条的粗细不同：0.15~1 个列宽
+            on *= step(fract(vUv.x * cols), 0.08 + 0.6 * pow(h1(c * 3.1 + seed * 0.7), 3.0));
+            // 噪声度 / 高频：竖条被切碎
+            float segs = 3.0 + uHigh * 90.0;
+            float cut = step(0.45, h1(floor(vUv.y * segs) * 7.13 + c * 0.37 + seed));
+            on *= mix(1.0, cut, clamp(uFlat * 1.6, 0.0, 1.0));
+            // 越深的层越稀，前景保持清楚
+            on *= step(h1(c * 0.91 + vLayer * 11.0), 0.9 - vLayer / uNL * 0.8);
+            // 最前面一层画 1px 外框，像测试图的边界
+            vec2 e = min(vUv, 1.0 - vUv);
+            float frame = step(e.x, 0.0015) + step(e.y, 0.003);
+            on = max(on, frame * step(vLayer, 0.5));
+            if (on < 0.5) discard;
             gl_FragColor = vec4(1.0);
           }`,
-        transparent: false,
+        side: THREE.DoubleSide,
       });
       this.mesh = new THREE.Mesh(geo, mat);
       this.mesh.frustumCulled = false;
@@ -146,104 +130,98 @@
     }
     update(f, t, dt, m) {
       const u = this.u;
-      u.uTime.value = t;
+      if (f.beat) u.uSeed.value = (u.uSeed.value + 1) % 997;
+      if (f.onsetFired && f.onset > 0.9) u.uSeed.value = (u.uSeed.value + 0.5) % 997;
       u.uLow.value = f.low * m.zDepth;
       u.uHigh.value = f.high;
-      u.uChaos.value = Math.pow(f.flatness, 1.5) * m.chaos;
-      u.uDensity.value = Math.min(1, 0.25 + f.rms * 0.9 + m.density - 0.5);
+      u.uFlat.value = f.flatness * m.chaos;
+      u.uDensity.value = Math.min(1, m.density + f.rms * 0.5);
       u.uDepth.value = 0.7 + f.energyFast * m.zDepth;
-      u.uOnset.value = f.onset;
     }
   }
 
-  /* ———————————————— B 半调体 ———————————————— */
-  class HalftoneVolume {
+  /* ———————————————— B 数据地形 Data Terrain ————————————————
+   * 3D 频谱瀑布：X = 频率，Z = 时间，Y = 幅度
+   * 128×64 个 1~2 像素的点 + 每 4 行一条细线，像数据可视化里的地形扫描 */
+  class DataTerrain {
     constructor(hist) {
-      this.name = 'B 半调体 Halftone Volume';
-      const NX = 44, NY = 30, NZ = 8, N = NX * NY * NZ;
-      const pos = new Float32Array(N * 3), cell = new Float32Array(N * 3);
-      let k = 0;
-      for (let z = 0; z < NZ; z++) for (let y = 0; y < NY; y++) for (let x = 0; x < NX; x++, k++) {
-        pos[k * 3] = (x - (NX - 1) / 2) * 0.26;
-        pos[k * 3 + 1] = (y - (NY - 1) / 2) * 0.26;
-        pos[k * 3 + 2] = -z * 0.9;
-        cell[k * 3] = x / (NX - 1); cell[k * 3 + 1] = y / (NY - 1); cell[k * 3 + 2] = z / (NZ - 1);
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      geo.setAttribute('aCell', new THREE.BufferAttribute(cell, 3));
+      this.name = 'B 数据地形 Data Terrain';
+      const COLS = 128, ROWS = 64;
       this.u = {
-        uHist: { value: hist.tex }, uTime: { value: 0 }, uFade: { value: 0 }, uLow: { value: 0 },
-        uMid: { value: 0 }, uHigh: { value: 0 }, uRms: { value: 0 }, uScale: { value: 1 },
-        uBreath: { value: 0 }, uDepth: { value: 1 },
+        uHist: { value: hist.tex }, uFade: { value: 0 }, uLow: { value: 0 }, uHigh: { value: 0 },
+        uFlat: { value: 0 }, uTime: { value: 0 }, uDepth: { value: 1 }, uHeight: { value: 1 }, uPx: { value: 1 },
       };
-      const mat = new THREE.ShaderMaterial({
-        uniforms: this.u,
-        vertexShader: GLSL_NOISE + `
-          uniform sampler2D uHist; uniform float uTime, uFade, uLow, uMid, uHigh, uRms, uScale, uBreath, uDepth;
-          attribute vec3 aCell; varying float vVal;
-          void main(){
-            // X → 频带，Z 层 → 历史（越深越旧）
-            float band = texture2D(uHist, vec2(aCell.x, aCell.z*0.5 + 0.004)).r;
-            float n = vnoise(vec3(aCell.xy*vec2(5.0,3.5), aCell.z*2.0 + uTime*(0.15+uMid*0.6)));
-            float v = n*0.55 + band*0.75*(1.0 - aCell.y*0.35) + uBreath;
-            v = clamp(v - 0.35, 0.0, 1.0) * 1.6;
-            vec3 p = position;
-            p.z = p.z*uDepth + uLow*2.4*v;          // 低频沿 Z 挤出
-            p.xy += (vec2(hash(position*3.1), hash(position*7.7))-.5) * uHigh*0.12;  // 高频抖动
-            vVal = v;
-            vec4 mv = modelViewMatrix * vec4(p, 1.0);
-            gl_PointSize = clamp(v, 0.0, 1.0) * uFade * uScale * 26.0 / -mv.z;
-            gl_Position = projectionMatrix * mv;
-          }`,
-        fragmentShader: `
-          varying float vVal;
-          void main(){
-            vec2 c = gl_PointCoord - .5;
-            if (dot(c,c) > .25) discard;
-            // 四级灰阶（参考图 2）
-            float g = floor(clamp(vVal,0.,1.)*3.99)/3.0;
-            gl_FragColor = vec4(vec3(0.35 + g*0.65), 1.0);
-          }`,
+      const VS = HASH + `
+        uniform sampler2D uHist; uniform float uFade, uLow, uHigh, uFlat, uTime, uDepth, uHeight, uPx;
+        attribute vec2 aCell; varying float vA;
+        void main(){
+          float u = aCell.x, row = aCell.y;
+          float a = texture2D(uHist, vec2(u, (row + 0.5) / 64.0)).r;
+          vec3 p;
+          p.x = (u - 0.5) * 13.0;
+          p.z = 3.5 - row * 0.2 * uDepth;
+          p.y = -1.4 + a * a * 3.2 * uHeight * uFade + uLow * 0.8 * exp(-row * 0.15);
+          // 噪声度：点在 Y 上随机散开；高频：细微抖动
+          float r = h1(u * 913.0 + row * 7.0 + floor(uTime * 12.0));
+          p.y += (r - 0.5) * (uFlat * 1.4 + uHigh * 0.25);
+          p.x *= mix(0.2, 1.0, uFade);
+          vA = a;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          gl_PointSize = uPx * (1.0 + step(0.55, a));
+          gl_Position = projectionMatrix * mv;
+        }`;
+      // 点
+      const pts = new Float32Array(COLS * ROWS * 3), cell = new Float32Array(COLS * ROWS * 2);
+      for (let j = 0, k = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++, k++) {
+        cell[k * 2] = (i + 0.5) / COLS; cell[k * 2 + 1] = j;
+      }
+      const pg = new THREE.BufferGeometry();
+      pg.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+      pg.setAttribute('aCell', new THREE.BufferAttribute(cell, 2));
+      const pmat = new THREE.ShaderMaterial({
+        uniforms: this.u, vertexShader: VS,
+        fragmentShader: `varying float vA; uniform float uFade; void main(){ if (uFade < 0.01) discard; gl_FragColor = vec4(1.0); }`,
       });
-      this.points = new THREE.Points(geo, mat);
+      this.points = new THREE.Points(pg, pmat);
       this.points.frustumCulled = false;
+      // 每 4 行一条线（线段对）
+      const lineRows = [];
+      for (let j = 0; j < ROWS; j += 4) lineRows.push(j);
+      const lc = new Float32Array(lineRows.length * (COLS - 1) * 2 * 2);
+      let k = 0;
+      lineRows.forEach((j) => {
+        for (let i = 0; i < COLS - 1; i++) for (let e = 0; e < 2; e++) {
+          lc[k++] = (i + e + 0.5) / COLS; lc[k++] = j;
+        }
+      });
+      const lg = new THREE.BufferGeometry();
+      lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lc.length / 2 * 3), 3));
+      lg.setAttribute('aCell', new THREE.BufferAttribute(lc, 2));
+      const lmat = new THREE.ShaderMaterial({
+        uniforms: this.u, vertexShader: VS,
+        fragmentShader: `uniform float uFade; void main(){ if (uFade < 0.01) discard; gl_FragColor = vec4(1.0); }`,
+      });
+      this.lines = new THREE.LineSegments(lg, lmat);
+      this.lines.frustumCulled = false;
       this.group = new THREE.Group();
-      this.group.add(this.points);
+      this.group.add(this.points, this.lines);
     }
     update(f, t, dt, m, renderer) {
       const u = this.u;
       u.uTime.value = t;
       u.uLow.value = f.low * m.zDepth;
-      u.uMid.value = f.mid;
       u.uHigh.value = f.high;
-      u.uRms.value = f.rms;
-      u.uDepth.value = 0.6 + f.energyFast * m.zDepth * 0.8;
-      // 静音待机：缓慢呼吸
-      u.uBreath.value = f.state === 'SILENT' ? 0.25 + 0.12 * Math.sin(t * 1.3) : m.density - 0.5;
-      u.uScale.value = renderer.getPixelRatio() * window.innerHeight / 900 * 9;
+      u.uFlat.value = Math.pow(f.flatness, 1.5) * m.chaos;
+      u.uDepth.value = 0.8 + f.energyFast * m.zDepth * 0.6;
+      u.uHeight.value = 0.6 + m.density;
+      u.uPx.value = Math.max(1, Math.round(renderer.getPixelRatio()));
     }
   }
 
-  /* ———————————————— C 唱片隧道 ———————————————— */
-  function textMask(text) {
-    const c = document.createElement('canvas');
-    c.width = 2048; c.height = 512;
-    const g = c.getContext('2d');
-    g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height);
-    g.fillStyle = '#fff';
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    let size = 380;
-    g.font = `800 ${size}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
-    const w = g.measureText(text).width;
-    if (w > 1900) { size *= 1900 / w; g.font = `800 ${size}px "Helvetica Neue", Helvetica, Arial, sans-serif`; }
-    g.fillText(text, 1024, 270);
-    return new THREE.CanvasTexture(c);
-  }
-
+  /* ———————————————— C 波形隧道 ———————————————— */
   class GrooveTunnel {
     constructor(hist) {
-      this.name = 'C 唱片隧道 Groove Tunnel';
+      this.name = 'C 波形隧道 Wave Tunnel';
       const RINGS = 56, SEG = 256;
       const pos = new Float32Array(RINGS * SEG * 2 * 3), attr = new Float32Array(RINGS * SEG * 2 * 2);
       let k = 0;
@@ -281,40 +259,10 @@
       this.lines = new THREE.LineSegments(geo, mat);
       this.lines.frustumCulled = false;
 
-      // 前景：同心圆条纹切出文字
-      this.textU = {
-        uMask: { value: textMask('SONIC FIELD') }, uTime: { value: 0 }, uFade: { value: 0 },
-        uMid: { value: 0 }, uSlice: { value: 0 }, uDensity: { value: 60 },
-      };
-      const tmat = new THREE.ShaderMaterial({
-        uniforms: this.textU,
-        vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-        fragmentShader: `
-          uniform sampler2D uMask; uniform float uTime, uFade, uMid, uSlice, uDensity; varying vec2 vUv;
-          void main(){
-            vec2 p = (vUv - vec2(.5, -.6)) * vec2(4.0, 1.0);
-            float r = length(p);
-            float m = texture2D(uMask, vUv).r;
-            // 文字内部的同心圆被径向推开，文字靠条纹的错位显现
-            float shift = m * (0.5 + uMid*1.5 + uSlice) * 0.09 * (fract(vUv.x*7.0) > .5 ? 1. : -.6);
-            float stripe = step(0.62, fract((r + shift) * uDensity - uTime*0.4));
-            if (stripe < 0.5 || uFade < 0.02) discard;
-            float edge = smoothstep(0.0, 0.1, vUv.x) * smoothstep(1.0, 0.9, vUv.x);
-            if (fract(r*3.0+vUv.y) > edge*uFade*1.05) discard;
-            gl_FragColor = vec4(1.0);
-          }`,
-        side: THREE.DoubleSide,
-      });
-      this.textPlane = new THREE.Mesh(new THREE.PlaneGeometry(9, 2.25), tmat);
-      this.textPlane.position.set(0, 0, 1.2);
       this.group = new THREE.Group();
-      this.group.add(this.lines, this.textPlane);
+      this.group.add(this.lines);
       this._scroll = 0;
       this._slice = 0;
-    }
-    setText(s) {
-      this.textU.uMask.value.dispose();
-      this.textU.uMask.value = textMask(s || ' ');
     }
     update(f, t, dt, m) {
       const u = this.u;
@@ -323,9 +271,6 @@
       this._slice *= Math.exp(-dt * 6);
       u.uTime.value = t; u.uLow.value = f.low * m.zDepth; u.uMid.value = f.mid; u.uOnset.value = f.onset;
       u.uScroll.value = this._scroll; u.uSlice.value = this._slice;
-      const tu = this.textU;
-      tu.uTime.value = t; tu.uMid.value = f.mid; tu.uSlice.value = this._slice;
-      tu.uDensity.value = 40 + f.centroid * 50;
     }
   }
 
@@ -390,7 +335,7 @@
         if (this.age[s] > this.life[s] || Math.abs(pts[b]) > 9 || Math.abs(pts[b + 1]) > 7) this._reset(s, false);
       }
       // 生成面向相机的带状几何
-      const baseW = (0.05 + (1 - f.centroid) * 0.1 + f.rms * 0.06) * this._fade;
+      const baseW = (0.025 + (1 - f.centroid) * 0.05 + f.rms * 0.03) * this._fade;
       const oP = this.outer.geometry.attributes.position.array, iP = this.inner.geometry.attributes.position.array;
       const T = this._t, V = this._v, Sd = this._side, cam = camera.position;
       for (let s = 0; s < S; s++) {
@@ -404,7 +349,7 @@
           const u = i / (P - 1);
           const taper = Math.pow(Math.sin(Math.PI * Math.min(1, u * 1.05)), 0.35);
           const w = baseW * this.wid[s] * taper * alive;
-          const wo = w + 0.03 * alive * this._fade;
+          const wo = w + 0.015 * alive * this._fade;
           const o = (s * P + i) * 6;
           for (let e = 0; e < 2; e++) {
             const sg = e ? -1 : 1;
@@ -494,5 +439,5 @@
 
   SF.HIST = HIST;
   SF.History = History;
-  SF.SceneClasses = [GlyphField, HalftoneVolume, GrooveTunnel, StrokeFlow, ScribbleNest];
+  SF.SceneClasses = [BarcodeStack, DataTerrain, GrooveTunnel, StrokeFlow, ScribbleNest];
 })();

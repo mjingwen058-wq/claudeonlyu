@@ -21,15 +21,15 @@
    *  scale   缩放 = base + 声音 × range
    */
   const SLOTS = [
-    { id: 'px', axis: 'X', kind: '位移', src: 'mid', mode: 'swing', range: 2.2, unit: '' },
+    { id: 'px', axis: 'X', kind: '位移', src: 'mid', mode: 'swing', range: 1.4, unit: '' },
     { id: 'rx', axis: 'X', kind: '旋转', src: 'centroid', mode: 'bipolar', range: 35, unit: '°' },
-    { id: 'sx', axis: 'X', kind: '缩放', src: 'mid', mode: 'scale', base: 0.8, range: 1.0, unit: '×' },
+    { id: 'sx', axis: 'X', kind: '缩放', src: 'mid', mode: 'scale', base: 0.85, range: 0.5, unit: '×' },
     { id: 'py', axis: 'Y', kind: '位移', src: 'low', mode: 'offset', range: 1.6, unit: '' },
     { id: 'ry', axis: 'Y', kind: '旋转', src: 'beat', mode: 'accum', range: 14, unit: '°' },
-    { id: 'sy', axis: 'Y', kind: '缩放', src: 'rms', mode: 'scale', base: 0.6, range: 1.6, unit: '×' },
-    { id: 'pz', axis: 'Z', kind: '位移', src: 'low', mode: 'offset', range: 2.0, unit: '' },
+    { id: 'sy', axis: 'Y', kind: '缩放', src: 'rms', mode: 'scale', base: 0.7, range: 0.8, unit: '×' },
+    { id: 'pz', axis: 'Z', kind: '位移', src: 'low', mode: 'offset', range: 1.5, unit: '' },
     { id: 'rz', axis: 'Z', kind: '旋转', src: 'onset', mode: 'kick', range: 22, unit: '°' },
-    { id: 'sz', axis: 'Z', kind: '缩放', src: 'low', mode: 'scale', base: 0.5, range: 1.5, unit: '×' },
+    { id: 'sz', axis: 'Z', kind: '缩放', src: 'low', mode: 'scale', base: 0.6, range: 1.0, unit: '×' },
   ];
   SLOTS.forEach((s) => { s.amt = 1; s.value = s.mode === 'scale' ? s.base : 0; s.acc = 0; s.sign = 1; });
 

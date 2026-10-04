@@ -36,6 +36,8 @@
         wave: new Float32Array(256),
       };
       this.listeners = {};
+      // 收音诊断：原始输入电平（dBFS，未经增益）、设备名、音频引擎状态
+      this.diag = { peakDb: -120, label: '', since: 0 };
       this._stateCand = 'SILENT';
       this._stateCandTime = 0;
       this._silence = 10;
@@ -61,6 +63,11 @@
         this.analyser.fftSize = 2048;
         this.analyser.smoothingTimeConstant = 0;
         this.inputGain.connect(this.analyser);
+        // Safari 等浏览器只处理连到输出端的音频链：接一个音量为 0 的出口，保证分析器一直有数据
+        this.sink = this.ctx.createGain();
+        this.sink.gain.value = 0;
+        this.analyser.connect(this.sink);
+        this.sink.connect(this.ctx.destination);
         const n = this.analyser.frequencyBinCount;
         this.freqDb = new Float32Array(n);
         this.mag = new Float32Array(n);
@@ -129,6 +136,10 @@
       this.stream = stream;
       this.source = this.ctx.createMediaStreamSource(stream);
       this.source.connect(this.inputGain);
+      if (this.ctx.state !== 'running') await this.ctx.resume();
+      const track = stream.getAudioTracks()[0];
+      this.diag.label = track ? track.label : '';
+      this.diag.since = performance.now();
       this.mode = 'mic';
       this.emit('source', this.mode);
     }
@@ -185,6 +196,7 @@
         this._updateState(dt);
         return f;
       }
+      const P0 = this.params;
       const an = this.analyser;
       an.getFloatFrequencyData(this.freqDb);
       an.getFloatTimeDomainData(this.timeData);
@@ -195,6 +207,10 @@
       const td = this.timeData;
       for (let i = 0; i < td.length; i++) s += td[i] * td[i];
       const rmsLin = Math.sqrt(s / td.length);
+      let pk = 0;
+      for (let i = 0; i < td.length; i++) pk = Math.max(pk, Math.abs(td[i]));
+      const pkDb = 20 * Math.log10(pk / Math.max(P0.gain, 1e-3) + 1e-9);
+      this.diag.peakDb = Math.max(pkDb, this.diag.peakDb - dt * 30); // 峰值保持，每秒回落 30dB
       const rmsN = clamp((20 * Math.log10(rmsLin + 1e-9) + 60) / 54);
       f.rms = ema(f.rms, rmsN, dt, rmsN > f.rms ? 0.03 : 0.12);
 

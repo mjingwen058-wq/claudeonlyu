@@ -3,7 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;800&family=DM+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap">
 <style>
 /* 布局：全屏 3D 画布 + 右侧可隐藏的控制面板；手机上面板变成底部抽屉 */
 :root {
@@ -13,7 +13,6 @@
   --line: #3a3a37;      /* 细线 */
   --well: #151514;      /* 控件底 */
   --hot: #ffffff;       /* 激活态 */
-  --font-display: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-ui: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   color-scheme: dark;
 }
@@ -24,7 +23,7 @@ body { margin: 0; background: var(--ink); color: var(--paper); font: 12px/1.45 v
 
 #panel {
   position: fixed; top: 0; right: 0; bottom: 0; width: 340px; max-width: 100%; box-sizing: border-box;
-  background: color-mix(in srgb, var(--ink) 88%, transparent);
+  background: var(--ink);
   border-left: 1px solid var(--line);
   overflow-y: auto; padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px calc(env(safe-area-inset-bottom, 0px) + 20px);
   display: flex; flex-direction: column; gap: 18px;
@@ -38,7 +37,7 @@ body.panel-hidden #panel { transform: translateX(100%); }
 body.panel-hidden #btn-panel { right: 12px; }
 
 .brand { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.brand h1 { font: 800 22px/1 var(--font-display); letter-spacing: -.01em; margin: 0; text-transform: uppercase; }
+.brand h1 { font: 500 13px/1 var(--font-ui); letter-spacing: .32em; margin: 0; text-transform: uppercase; }
 .brand small { color: var(--dim); }
 
 section { display: flex; flex-direction: column; gap: 8px; }
@@ -72,7 +71,7 @@ input[type=range] { width: 100%; accent-color: var(--paper); }
 #meters { display: flex; flex-direction: column; gap: 6px; }
 
 .beat { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-#bpm { font: 800 26px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+#bpm { font: 500 22px/1 var(--font-ui); font-variant-numeric: tabular-nums; }
 #phase { display: flex; gap: 4px; }
 #phase i { width: 10px; height: 10px; border: 1px solid var(--paper); display: block; }
 #phase i.on { background: var(--paper); }
@@ -83,6 +82,9 @@ input[type=range] { width: 100%; accent-color: var(--paper); }
 input[type=text] { font: inherit; color: var(--paper); background: var(--well); border: 1px solid var(--line); padding: 6px 8px; width: 100%; box-sizing: border-box; }
 .check { display: flex; gap: 6px; align-items: center; color: var(--dim); }
 #msg { color: var(--dim); min-height: 1.4em; }
+#start-msg:empty { display: none; }
+#start-msg { color: var(--paper); border-left: 2px solid var(--paper); padding-left: 10px; max-width: 52ch; }
+.meter.lvl .m-val { width: 52px; }
 #msg.err { color: var(--paper); border-left: 2px solid var(--paper); padding-left: 8px; }
 .keys { color: var(--dim); display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
 kbd { font: inherit; border: 1px solid var(--line); padding: 0 4px; color: var(--paper); }
@@ -90,8 +92,9 @@ kbd { font: inherit; border: 1px solid var(--line); padding: 0 4px; color: var(-
 /* 开始界面：浏览器要求先点击才能开声音 */
 #start { position: fixed; inset: 0; z-index: 5; background: var(--ink); display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
 #start .card { max-width: 560px; display: flex; flex-direction: column; gap: 18px; }
-#start h1 { font: 800 clamp(44px, 11vw, 96px)/.86 var(--font-display); letter-spacing: -.03em; margin: 0; text-transform: uppercase; }
-#start h1 span { display: block; font-weight: 500; }
+#start h1 { font: 500 clamp(18px, 3vw, 26px)/1.2 var(--font-ui); letter-spacing: .4em; margin: 0; text-transform: uppercase; }
+#start h1 span { margin-left: .8em; }
+#start h1::after { content: ""; display: block; height: 1px; background: var(--paper); margin-top: 18px; }
 #start p { margin: 0; color: var(--dim); max-width: 46ch; font-size: 13px; }
 #start .row button, #start .row .filebtn { padding: 10px 14px; font-size: 13px; }
 
@@ -141,6 +144,7 @@ body.panel-hidden #axis-hud { opacity: .85; }
       <span class="filebtn">音频文件<input id="file" type="file" accept="audio/*"></span>
       <button id="btn-stop" type="button">停止</button>
     </div>
+    <div class="meter lvl"><span class="m-name">收音电平</span><span class="m-bar"><i id="lvl"></i></span><span class="m-val" id="lvl-v">—</span><span class="m-target" id="diag-text">还没有输入</span></div>
     <div class="ctl"><label for="gain">输入增益</label><input id="gain" type="range" min="0.1" max="8" step="0.05"><output id="gain-v"></output></div>
     <div class="ctl"><label for="gate">静音门限</label><input id="gate" type="range" min="0" max="0.4" step="0.01"><output id="gate-v"></output></div>
     <div class="ctl"><label for="onsetK">起音灵敏</label><input id="onsetK" type="range" min="0.6" max="3.5" step="0.05"><output id="onsetK-v"></output></div>
@@ -170,14 +174,13 @@ body.panel-hidden #axis-hud { opacity: .85; }
   <section>
     <h2>场景 Scene <span id="scene-name"></span></h2>
     <div class="row">
-      <button type="button" data-scene="0" title="字形场">A 字形</button>
-      <button type="button" data-scene="1" title="半调体">B 半调</button>
-      <button type="button" data-scene="2" title="唱片隧道">C 隧道</button>
+      <button type="button" data-scene="0" title="条码层">A 条码</button>
+      <button type="button" data-scene="1" title="数据地形">B 地形</button>
+      <button type="button" data-scene="2" title="波形隧道">C 隧道</button>
       <button type="button" data-scene="3" title="笔触流">D 笔触</button>
       <button type="button" data-scene="4" title="涂鸦巢">E 涂鸦</button>
     </div>
     <label class="check"><input id="auto" type="checkbox" checked> 自动：按状态和噪声度切场景，只在小节线上切（A）</label>
-    <input id="text" type="text" value="SONIC FIELD" maxlength="24" aria-label="隧道场景里的文字">
   </section>
 
   <section>
@@ -218,12 +221,13 @@ body.panel-hidden #axis-hud { opacity: .85; }
 <div id="start">
   <div class="card">
     <h1>Sonic<span>Field</span></h1>
-    <p>声音进来，空间跟着变：X、Y、Z 三个轴的位移、旋转、缩放都由声音驱动，频谱铺在横向，时间往纵深流，噪声把网格打散。先选一个声音来源。</p>
+    <p>声音进来，空间跟着变：X、Y、Z 三个轴的位移、旋转、缩放都由声音驱动，频谱铺在横向，时间往纵深流，噪声把秩序打散。先选一个声音来源。</p>
     <div class="row">
       <button id="start-mic" type="button">用麦克风</button>
       <button id="start-demo" type="button">听演示信号</button>
       <span class="filebtn">选一个音频文件<input id="start-file" type="file" accept="audio/*"></span>
     </div>
+    <p id="start-msg" role="status"></p>
     <p>浏览器会询问是否允许使用麦克风，点“允许”。在 claude.ai 里预览时不能用麦克风，只能用演示信号或音频文件。</p>
   </div>
 </div>

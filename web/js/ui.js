@@ -28,6 +28,8 @@
     const el = $('msg');
     el.textContent = text || '';
     el.classList.toggle('err', !!isErr);
+    // 开始界面还挡着面板时，错误也显示在开始界面上
+    if (!$('start').hidden) $('start-msg').textContent = isErr ? text : '';
   };
 
   // —— 输入源 ——
@@ -54,7 +56,7 @@
       const blocked = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
       msg(blocked
         ? '麦克风被拒绝了。如果你是在 claude.ai 里打开的这个页面，那里不允许用麦克风；请在本地用 Chrome 打开 web/index.html（见 README）。现在可以先用演示信号或音频文件。'
-        : `麦克风打不开：${e.message || e}`, true);
+        : `麦克风打不开（${e.name || '错误'}）：${e.message || e}`, true);
     }
   }
   async function startDemo() { await audio.useDemo(); msg('正在播放内置演示信号（16 小节循环：平稳 → 上升 → 高能）。'); hideStart(); }
@@ -128,7 +130,6 @@
   const sceneBtns = [...document.querySelectorAll('[data-scene]')];
   sceneBtns.forEach((b) => (b.onclick = () => { SF.setActive(+b.dataset.scene); $('auto').checked = false; }));
   $('auto').onchange = (e) => (M.auto = e.target.checked);
-  $('text').addEventListener('change', (e) => SF.scenes[2].setText(e.target.value.toUpperCase()));
 
   // —— 面板显隐 / 快捷键 ——
   const togglePanel = () => document.body.classList.toggle('panel-hidden');
@@ -169,6 +170,21 @@
       st.dataset.state = f.state;
       $('scene-name').textContent = sc.name;
       sceneBtns.forEach((btn, i) => btn.classList.toggle('on', i === idx));
+      // 收音诊断
+      const dg = audio.diag;
+      const db = audio.mode === 'none' ? -120 : dg.peakDb;
+      $('lvl').style.transform = `scaleX(${Math.max(0, Math.min(1, (db + 90) / 90))})`;
+      $('lvl-v').textContent = db <= -119 ? '—' : `${db.toFixed(0)} dB`;
+      const ctxState = audio.ctx ? `${audio.ctx.state} · ${audio.ctx.sampleRate}Hz` : '还没有输入';
+      $('diag-text').textContent = audio.mode === 'mic' ? `${dg.label || '麦克风'} · ${ctxState}` : ctxState;
+      const deaf = audio.mode === 'mic' && performance.now() - dg.since > 3000 && dg.peakDb < -85;
+      if (deaf && !this._deafShown) {
+        this._deafShown = true;
+        msg('麦克风已打开，但 3 秒内收不到任何声音。请检查：① 系统设置 → 隐私与安全性 → 麦克风，是否允许了这个浏览器（改完要重启浏览器）；② 上面的下拉菜单里换一个输入设备；③ 浏览器地址栏左边的权限图标里，麦克风是否选了“允许”。', true);
+      } else if (!deaf && this._deafShown && dg.peakDb > -70) {
+        this._deafShown = false;
+        msg('收到声音了。');
+      }
       $('src').textContent = { none: '无输入', mic: '麦克风', file: '音频文件', demo: '演示信号' }[audio.mode];
     },
   };

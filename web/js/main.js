@@ -23,7 +23,7 @@
   // —— 可调映射参数（UI 面板绑定这里）——
   const M = {
     zDepth: 1, chaos: 1, density: 0.5, rowsPerBeat: 8,
-    edge: 0, feedback: 0.55, threshold: 0, invertOnOnset: true,
+    edge: 0, feedback: 0.15, threshold: 0, invertOnOnset: true,
     auto: true, manual: 0,
   };
   SF.M = M;
@@ -36,9 +36,9 @@
   function pickScene(f) {
     const noisy = f.flatness > 0.45;
     switch (f.state) {
-      case 'SILENT': return 1;              // 半调体缓慢呼吸
-      case 'CALM': return noisy ? 1 : 0;    // 音调性 → 字形场；噪声 → 半调体
-      case 'BUILD': return 2;               // 唱片隧道
+      case 'SILENT': return 1;              // 数据地形（静止的点阵）
+      case 'CALM': return noisy ? 1 : 0;    // 音调性 → 条码层；噪声 → 数据地形
+      case 'BUILD': return 2;               // 波形隧道
       case 'DROP': return noisy ? 4 : 3;    // 噪声 → 涂鸦巢；音调性 → 笔触流
     }
     return 0;
@@ -92,7 +92,8 @@
     });
 
     // 后期
-    if (f.onsetFired && f.state === 'DROP' && M.invertOnOnset && f.onset > 0.9 && f.low > 0.55) fx.flash = 1;
+    // 频闪：上升/高能段的重拍整屏反相一帧（池田亮司式的硬切）
+    if (f.onsetFired && (f.state === 'DROP' || f.state === 'BUILD') && M.invertOnOnset && f.low > 0.45) fx.flash = 1;
     fx.flash *= Math.exp(-dt * 14);
     post.u.uEdge.value = M.edge;
     post.u.uFeedback.value = M.feedback * (0.6 + f.energyFast * 0.5);

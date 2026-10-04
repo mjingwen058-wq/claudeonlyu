@@ -1,6 +1,6 @@
 # Sonic Field
 
-声音驱动的 3D 黑白 VJ 视觉。麦克风收音 → 提取 10 个声音特征 → 驱动五个 3D 场景（字形场、半调体、唱片隧道、笔触流、涂鸦巢）。
+声音驱动的 3D 黑白 VJ 视觉。麦克风收音 → 提取 10 个声音特征 → 驱动五个 3D 场景（条码层、数据地形、波形隧道、笔触流、涂鸦巢），视觉方向参考池田亮司的纯黑白数据美学。
 
 - 映射标准和 TouchDesigner 移植对照：[`docs/mapping.md`](docs/mapping.md)
 - 浏览器原型：[`web/`](web/)（Three.js + Web Audio，不用联网，three.js 已经放在 `web/vendor/`）
@@ -12,7 +12,7 @@
   第一次需要在仓库 **Settings → Pages → Build and deployment → Source** 里选 **GitHub Actions**。之后每次推送 `web/` 都会自动更新，大约 1 分钟生效。
 - 临时链接（按提交号托管，不需要设置）：`https://rawcdn.githack.com/mjingwen058-wq/claudeonlyu/<提交号>/web/index.html`
 
-打开后点“用麦克风”，浏览器问是否允许时点“允许”。
+打开后点“用麦克风”，浏览器问是否允许时点“允许”。面板顶部的**收音电平**会显示原始输入音量（dB）：对着麦克风说话应该在 -50 到 -10 dB 之间跳。如果一直是“—”，按面板里的提示检查系统的麦克风权限。
 
 ## 在本地运行（用麦克风）
 
