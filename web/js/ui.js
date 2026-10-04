@@ -116,11 +116,62 @@
     const r = row.querySelector('input'), o = row.querySelector('output');
     r.oninput = () => { s.amt = parseFloat(r.value); o.textContent = s.amt.toFixed(2); };
   });
+  $('agc').checked = rig.agc;
   $('agc').onchange = (e) => (rig.agc = e.target.checked);
   bindRange('axisSpeed', () => rig.speed, (v) => (rig.speed = v), (v) => v.toFixed(1));
 
   $('invertOnOnset').checked = M.invertOnOnset;
   $('invertOnOnset').onchange = (e) => (M.invertOnOnset = e.target.checked);
+
+  // —— 底噪校准 ——
+  $('btn-calib').onclick = () => { audio.recalibrate(); msg('正在测底噪，请保持安静 2 秒…'); };
+  audio.on('calibrated', (g, noisy) => {
+    const el = $('gate'); el.value = g; el.dispatchEvent(new Event('input'));
+    msg(noisy
+      ? `测底噪时已经有声音了，静音门限先设为 ${g.toFixed(2)}。想要更准，请先把音乐停掉，再点“重新校准底噪”。`
+      : `底噪测好了，静音门限设为 ${g.toFixed(2)}。现在可以放音乐或说话了。`);
+  });
+
+  // —— 诊断记录：每 0.25 秒记一次，保留最近 10 秒，点按钮生成可以复制的报告 ——
+  const samples = [];
+  let sampleAcc = 0;
+  function record(f) {
+    samples.push({ db: +audio.diag.peakDb.toFixed(1), rms: +f.rms.toFixed(3), pres: +f.presence.toFixed(2),
+      low: +f.low.toFixed(2), mid: +f.mid.toFixed(2), high: +f.high.toFixed(2), on: +f.onset.toFixed(2) });
+    if (samples.length > 40) samples.shift();
+  }
+  const stat = (k) => {
+    if (!samples.length) return null;
+    const v = samples.map((s) => s[k]);
+    return { min: Math.min(...v), max: Math.max(...v), avg: +(v.reduce((a, b) => a + b, 0) / v.length).toFixed(3) };
+  };
+  $('btn-diag').onclick = async () => {
+    let perm = 'unknown';
+    try { perm = (await navigator.permissions.query({ name: 'microphone' })).state; } catch (e) {}
+    const tr = audio.stream && audio.stream.getAudioTracks()[0];
+    let settings = null;
+    try { settings = tr && tr.getSettings ? tr.getSettings() : null; } catch (e) {}
+    const report = {
+      time: new Date().toISOString(),
+      ua: navigator.userAgent,
+      page: location.origin + location.pathname,
+      secure: window.isSecureContext,
+      micPermission: perm,
+      mode: audio.mode,
+      ctx: audio.ctx ? { state: audio.ctx.state, sampleRate: audio.ctx.sampleRate } : null,
+      track: tr ? { label: tr.label, readyState: tr.readyState, muted: tr.muted, enabled: tr.enabled, settings } : null,
+      gain: audio.params.gate !== undefined ? { gain: audio.params.gain, gate: audio.params.gate } : null,
+      last10s: { peakDb: stat('db'), rms: stat('rms'), presence: stat('pres'), low: stat('low'), mid: stat('mid'), high: stat('high'), onset: stat('on') },
+      state: audio.f.state, bpm: +audio.f.bpm.toFixed(1),
+      lastMessage: $('msg').textContent,
+    };
+    const text = JSON.stringify(report);
+    const out = $('diag-out');
+    out.hidden = false;
+    out.value = text;
+    try { await navigator.clipboard.writeText(text); msg('诊断信息已复制，直接粘贴发给 Claude。'); }
+    catch (e) { out.focus(); out.select(); msg('自动复制失败：诊断信息已选中，按 Ctrl+C（Mac 用 Cmd+C）复制后发给 Claude。'); }
+  };
 
   // —— 节拍 ——
   $('btn-tap').onclick = () => { audio.tap(); $('bpmAuto').checked = false; };
@@ -171,12 +222,15 @@
       $('scene-name').textContent = sc.name;
       sceneBtns.forEach((btn, i) => btn.classList.toggle('on', i === idx));
       // 收音诊断
+      sampleAcc += 50;
+      if (sampleAcc >= 250) { sampleAcc = 0; record(f); }
       const dg = audio.diag;
       const db = audio.mode === 'none' ? -120 : dg.peakDb;
       $('lvl').style.transform = `scaleX(${Math.max(0, Math.min(1, (db + 90) / 90))})`;
       $('lvl-v').textContent = db <= -119 ? '—' : `${db.toFixed(0)} dB`;
       const ctxState = audio.ctx ? `${audio.ctx.state} · ${audio.ctx.sampleRate}Hz` : '还没有输入';
-      $('diag-text').textContent = audio.mode === 'mic' ? `${dg.label || '麦克风'} · ${ctxState}` : ctxState;
+      const tag = f.calibrating ? ' · 正在测底噪' : dg.muted ? ' · 系统把麦克风静音了' : dg.ended ? ' · 麦克风断开了' : ` · 有声音 ${Math.round(f.presence * 100)}%`;
+      $('diag-text').textContent = (audio.mode === 'mic' ? `${dg.label || '麦克风'} · ${ctxState}` : ctxState) + (audio.mode === 'none' ? '' : tag);
       const deaf = audio.mode === 'mic' && performance.now() - dg.since > 3000 && dg.peakDb < -85;
       if (deaf && !this._deafShown) {
         this._deafShown = true;

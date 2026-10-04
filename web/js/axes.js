@@ -46,7 +46,7 @@
       scene.add(this.world);
       this.slots = SLOTS;
       this.sources = SOURCES;
-      this.agc = true;
+      this.agc = false; // 默认用绝对电平：放音乐和安静时差别才明显
       this.speed = 8; // 轴响应速度
       this.peaks = {};
       AGC_KEYS.forEach((k) => (this.peaks[k] = 0.1));
@@ -75,24 +75,25 @@
       // 更新峰值：快速跟上，8 秒衰减；下限防止静音时把底噪放大
       AGC_KEYS.forEach((k) => {
         const v = k === 'energy' ? f.energyFast : f[k] || 0;
-        this.peaks[k] = Math.max(v, this.peaks[k] * Math.exp(-dt / 8), 0.08);
+        this.peaks[k] = Math.max(v, this.peaks[k] * Math.exp(-dt / 8), 0.15);
       });
       if (f.onsetFired) SLOTS.forEach((s) => { if (s.mode === 'kick') s.sign *= -1; });
       const dir = f.beatCount % 8 < 4 ? 1 : -1;
 
       SLOTS.forEach((s) => {
-        const v = this._read(f, s.src) * s.amt;
+        const pres = f.presence; // 安静时三个轴回到静止
+        const v = this._read(f, s.src) * s.amt * pres;
         this.drive[s.id] = v;
         let target;
         switch (s.mode) {
           case 'swing': target = v * s.range * Math.sin(this.t * 1.7); break;
           case 'offset': target = v * s.range; break;
-          case 'bipolar': target = (this._read(f, s.src) - 0.5) * 2 * s.range * s.amt; break;
+          case 'bipolar': target = (this._read(f, s.src) - 0.5) * 2 * s.range * s.amt * pres; break;
           case 'kick': target = v * s.range * s.sign; break;
           case 'scale': target = s.base + v * s.range; break;
           case 'accum': {
             const discrete = s.src === 'beat' || s.src === 'onset';
-            if (discrete) { if ((s.src === 'beat' ? f.beat : f.onsetFired)) s.acc += s.range * s.amt * dir; }
+            if (discrete) { if (pres > 0.5 && (s.src === 'beat' ? f.beat : f.onsetFired)) s.acc += s.range * s.amt * dir; }
             else s.acc += v * s.range * dt * dir;
             target = s.acc;
             break;

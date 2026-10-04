@@ -32,6 +32,8 @@
         bpm: 120, bpmConf: 0, phase: 0, beat: false, beatCount: 0, bar: 0, barStart: false,
         energyFast: 0, energyMid: 0, energySlow: 0,
         state: 'SILENT', stateTime: 0,
+        presence: 0, // 有没有声音：0 = 安静，1 = 有声音。画面所有动作都乘它
+        calibrating: false,
         bands: new Float32Array(NB),
         wave: new Float32Array(256),
       };
@@ -52,12 +54,12 @@
     }
 
     on(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); }
-    emit(ev, d) { (this.listeners[ev] || []).forEach((fn) => fn(d)); }
+    emit(ev, ...a) { (this.listeners[ev] || []).forEach((fn) => fn(...a)); }
 
-    async ensureCtx() {
+    async ensureCtx(sampleRate) {
       if (!this.ctx) {
         const AC = window.AudioContext || window.webkitAudioContext;
-        this.ctx = new AC();
+        this.ctx = sampleRate ? new AC({ sampleRate }) : new AC();
         this.inputGain = this.ctx.createGain();
         this.analyser = this.ctx.createAnalyser();
         this.analyser.fftSize = 2048;
@@ -123,26 +125,52 @@
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('这个浏览器环境不允许访问麦克风。请用 Chrome 打开本地的 web/index.html（见 README）。');
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          deviceId: deviceId ? { exact: deviceId } : undefined,
-          // VJ 场景要原始信号：关掉通话用的降噪、回声消除和自动增益
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-      });
+      // 依次尝试：指定设备 + 关闭通话处理 → 默认设备 + 关闭通话处理 → 最宽松的 {audio: true}
+      const raw = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+      const attempts = [];
+      if (deviceId) attempts.push({ audio: { ...raw, deviceId: { exact: deviceId } } });
+      attempts.push({ audio: raw }, { audio: true });
+      let stream = null, lastErr = null;
+      for (const c of attempts) {
+        try { stream = await navigator.mediaDevices.getUserMedia(c); break; }
+        catch (e) {
+          lastErr = e;
+          // 用户或系统拒绝时，换参数也没用，直接报错
+          if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) throw e;
+        }
+      }
+      if (!stream) throw lastErr || new Error('没有拿到麦克风');
       this.stop();
       this.stream = stream;
-      this.source = this.ctx.createMediaStreamSource(stream);
+      const track = stream.getAudioTracks()[0];
+      try {
+        this.source = this.ctx.createMediaStreamSource(stream);
+      } catch (e) {
+        // Firefox：麦克风采样率和音频引擎不一致时会报错，按麦克风的采样率重建音频引擎
+        const sr = track && track.getSettings ? track.getSettings().sampleRate : undefined;
+        try { await this.ctx.close(); } catch (e2) {}
+        this.ctx = null;
+        await this.ensureCtx(sr);
+        this.source = this.ctx.createMediaStreamSource(stream);
+      }
       this.source.connect(this.inputGain);
       if (this.ctx.state !== 'running') await this.ctx.resume();
-      const track = stream.getAudioTracks()[0];
       this.diag.label = track ? track.label : '';
+      this.diag.muted = !!(track && track.muted);
+      this.diag.ended = false;
+      if (track) {
+        track.onmute = () => (this.diag.muted = true);
+        track.onunmute = () => (this.diag.muted = false);
+        track.onended = () => (this.diag.ended = true);
+      }
       this.diag.since = performance.now();
+      this._calib = { t: 0, max: 0 }; // 开麦后先听 2 秒底噪，自动设静音门限
       this.mode = 'mic';
       this.emit('source', this.mode);
     }
+
+    /* 重新校准底噪（保持安静 2 秒） */
+    recalibrate() { if (this.mode === 'mic') this._calib = { t: 0, max: 0 }; }
 
     async useFile(file) {
       await this.ensureCtx();
@@ -192,6 +220,7 @@
         // 无输入：所有特征衰减到 0，状态回到 SILENT
         for (let i = 0; i < NB; i++) f.bands[i] *= 0.9;
         f.rms *= 0.9; f.low *= 0.9; f.mid *= 0.9; f.high *= 0.9; f.onset *= 0.9;
+        f.presence = ema(f.presence, 0, dt, 0.8);
         this._advanceBeat(dt, false);
         this._updateState(dt);
         return f;
@@ -213,6 +242,26 @@
       this.diag.peakDb = Math.max(pkDb, this.diag.peakDb - dt * 30); // 峰值保持，每秒回落 30dB
       const rmsN = clamp((20 * Math.log10(rmsLin + 1e-9) + 60) / 54);
       f.rms = ema(f.rms, rmsN, dt, rmsN > f.rms ? 0.03 : 0.12);
+
+      // 底噪校准：开麦后 2 秒内记录最大电平，门限设在它上面一点
+      if (this._calib && this.mode === 'mic') {
+        this._calib.t += dt;
+        this._calib.max = Math.max(this._calib.max, rmsN);
+        f.calibrating = true;
+        if (this._calib.t > 2) {
+          // 测底噪时如果已经有明显的声音（比如音乐已经在放），门限最多设到 0.35，并提示重新校准
+          const noisy = this._calib.max > 0.3;
+          this.params.gate = clamp(this._calib.max + 0.06, 0.05, 0.35);
+          this._calib = null;
+          f.calibrating = false;
+          this.emit('calibrated', this.params.gate, noisy);
+        }
+      } else f.calibrating = false;
+
+      // 存在感：超过门限才算“有声音”；上升 50ms、回落 1.2 秒
+      const over = clamp((rmsN - this.params.gate) / 0.12);
+      const presT = f.calibrating ? 0 : over * over * (3 - 2 * over);
+      f.presence = ema(f.presence, presT, dt, presT > f.presence ? 0.05 : 1.2);
 
       // 波形（256 点降采样，给唱片隧道用）
       const step = td.length / 256;
