@@ -35,7 +35,7 @@
 | 64 带频谱 | **X 轴** | 从左到右是低频到高频（条码的列、地形的横向） |
 | 时间历史 | **Z 轴** | 每拍推入 N 行（默认 8 行/拍）到 64 行的历史纹理，越深越旧，形成 3D 瀑布 |
 | 频带幅度 | **Y 轴 / 密度** | 幅度越大，地形越高、条码越密 |
-| Low | Z 向冲击 | 最新几行沿 Z 冲出、半调点阵沿 Z 挤出、隧道环扩张、涂鸦巢撑开、镜头推近 |
+| Low | Z 向冲击 | 最新几层条码沿 Z 冲出、地形前排抬起、隧道环扩张、涂鸦巢撑开、整个空间朝镜头推 |
 | Mid | 流动、形变 | 噪声场速度、笔触流速、隧道环的波形幅度、文字条纹错位 |
 | High | 细节、碎裂 | 条码切碎、地形点抖动、涂鸦线条数和抖动 |
 | RMS | 全局密度 | 条码密度、笔触线宽 |
@@ -88,9 +88,9 @@
 | BPM / 拍 | **Beat CHOP** 或 **Timer CHOP**，配合手动 Tap |
 | 历史纹理（X 频率 × Z 时间） | **Trail CHOP** 或 **CHOP to TOP** + **Cache TOP** |
 | 状态机 | **Logic CHOP** / **Timer CHOP**，或者用 Script CHOP 输出状态编号 |
-| A 字形场 | **Text SOP**（K、M 各一个）→ **Geometry COMP**，Instancing 读一个 CHOP 的 tx/ty/tz/scale 通道 |
-| B 半调体 | **Sphere SOP**/**Circle SOP** → Geometry COMP，实例位置来自 **Noise CHOP/TOP** × 频谱 |
-| C 唱片隧道 | **Circle SOP**（开放弧线）+ **CHOP to SOP** 写入波形 → **Copy SOP** 沿 Z 复制 |
+| A 条码层 | **Rectangle SOP** → **Geometry COMP** 实例化成多层，条码用 **GLSL TOP/MAT** 或 **CHOP to TOP** 生成的纹理 |
+| B 数据地形 | **Grid SOP** + **CHOP to SOP**（频谱历史写入 Y）→ 点用 Point Sprite MAT，线用 Line MAT |
+| C 波形隧道 | **Circle SOP**（开放弧线）+ **CHOP to SOP** 写入波形 → **Copy SOP** 沿 Z 复制 |
 | D 笔触流 | **Line SOP** + **Noise SOP** + **Trail SOP**，或 **Particle SOP/POP** 拖尾，线宽用 Line MAT |
 | E 涂鸦巢 | **Noise CHOP** 驱动的点 → **Trail SOP** → 中心 **Sphere SOP** |
 | 轴映射（world 的 9 个控制位） | 把所有 geo 放进一个父 **Geometry COMP** 或 **Null COMP**，它的 tx/ty/tz、rx/ry/rz、sx/sy/sz 用表达式读特征 CHOP，经过 **Lag CHOP** 平滑 |
