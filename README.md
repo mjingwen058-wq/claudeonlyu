@@ -4,6 +4,7 @@
 
 - 映射标准和 TouchDesigner 移植对照：[`docs/mapping.md`](docs/mapping.md)
 - 浏览器原型：[`web/`](web/)（Three.js + Web Audio，不用联网，three.js 已经放在 `web/vendor/`）
+- TouchDesigner 版：[`td/`](td/)（一键搭建脚本和一步步测试说明，见 [`td/README.md`](td/README.md)）
 
 ## 在本地运行（用麦克风）
 
