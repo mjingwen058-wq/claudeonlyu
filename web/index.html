@@ -1,0 +1,207 @@
+<title>Sonic Field VJ</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;800&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* 布局：全屏 3D 画布 + 右侧可隐藏的控制面板；手机上面板变成底部抽屉 */
+:root {
+  --ink: #000;          /* 画布与面板底色 */
+  --paper: #f3f3ef;     /* 主文字，略带暖的白 */
+  --dim: #8d8d88;       /* 次要文字 */
+  --line: #3a3a37;      /* 细线 */
+  --well: #151514;      /* 控件底 */
+  --hot: #ffffff;       /* 激活态 */
+  --font-display: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-ui: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--ink); color: var(--paper); font: 12px/1.45 var(--font-ui); overflow: hidden; }
+#stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: var(--ink); }
+
+#panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 340px; max-width: 100%; box-sizing: border-box;
+  background: color-mix(in srgb, var(--ink) 88%, transparent);
+  border-left: 1px solid var(--line);
+  overflow-y: auto; padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px calc(env(safe-area-inset-bottom, 0px) + 20px);
+  display: flex; flex-direction: column; gap: 18px;
+  transition: transform .25s ease;
+}
+body.panel-hidden #panel { transform: translateX(100%); }
+#btn-panel {
+  position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 352px; z-index: 3;
+  transition: right .25s ease;
+}
+body.panel-hidden #btn-panel { right: 12px; }
+
+.brand { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.brand h1 { font: 800 22px/1 var(--font-display); letter-spacing: -.01em; margin: 0; text-transform: uppercase; }
+.brand small { color: var(--dim); }
+
+section { display: flex; flex-direction: column; gap: 8px; }
+section > h2 {
+  margin: 0; font: 500 10px/1 var(--font-ui); letter-spacing: .14em; text-transform: uppercase; color: var(--dim);
+  display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 6px;
+}
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+button, .filebtn, select {
+  font: inherit; color: var(--paper); background: var(--well); border: 1px solid var(--line);
+  padding: 6px 9px; border-radius: 0; cursor: pointer;
+}
+button:hover, .filebtn:hover { border-color: var(--paper); }
+button:focus-visible, select:focus-visible, input:focus-visible, .filebtn:focus-within { outline: 1px solid var(--hot); outline-offset: 2px; }
+button.on { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+select { width: 100%; }
+.filebtn { position: relative; overflow: hidden; display: inline-block; }
+.filebtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.ctl { display: grid; grid-template-columns: 92px 1fr 64px; gap: 8px; align-items: center; }
+.ctl label { color: var(--dim); }
+.ctl output { text-align: right; font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--paper); }
+
+.meter { display: grid; grid-template-columns: 112px 1fr 34px; grid-template-rows: auto auto; column-gap: 8px; align-items: center; }
+.m-name { grid-row: 1; }
+.m-bar { grid-row: 1; height: 7px; background: var(--well); border: 1px solid var(--line); overflow: hidden; }
+.m-bar i { display: block; height: 100%; background: var(--paper); transform-origin: left; transform: scaleX(0); }
+.m-val { grid-row: 1; text-align: right; font-variant-numeric: tabular-nums; }
+.m-target { grid-column: 2 / 4; grid-row: 2; color: var(--dim); font-size: 10px; }
+#meters { display: flex; flex-direction: column; gap: 6px; }
+
+.beat { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#bpm { font: 800 26px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+#phase { display: flex; gap: 4px; }
+#phase i { width: 10px; height: 10px; border: 1px solid var(--paper); display: block; }
+#phase i.on { background: var(--paper); }
+#state { padding: 3px 7px; border: 1px solid var(--paper); letter-spacing: .06em; }
+#state[data-state="DROP"] { background: var(--paper); color: var(--ink); }
+#state[data-state="SILENT"] { border-style: dashed; color: var(--dim); border-color: var(--dim); }
+#scene-name { color: var(--dim); }
+input[type=text] { font: inherit; color: var(--paper); background: var(--well); border: 1px solid var(--line); padding: 6px 8px; width: 100%; box-sizing: border-box; }
+.check { display: flex; gap: 6px; align-items: center; color: var(--dim); }
+#msg { color: var(--dim); min-height: 1.4em; }
+#msg.err { color: var(--paper); border-left: 2px solid var(--paper); padding-left: 8px; }
+.keys { color: var(--dim); display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+kbd { font: inherit; border: 1px solid var(--line); padding: 0 4px; color: var(--paper); }
+
+/* 开始界面：浏览器要求先点击才能开声音 */
+#start { position: fixed; inset: 0; z-index: 5; background: var(--ink); display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+#start .card { max-width: 560px; display: flex; flex-direction: column; gap: 18px; }
+#start h1 { font: 800 clamp(44px, 11vw, 96px)/.86 var(--font-display); letter-spacing: -.03em; margin: 0; text-transform: uppercase; }
+#start h1 span { display: block; font-weight: 500; }
+#start p { margin: 0; color: var(--dim); max-width: 46ch; font-size: 13px; }
+#start .row button, #start .row .filebtn { padding: 10px 14px; font-size: 13px; }
+
+@media (max-width: 640px) {
+  #panel { top: auto; height: 58%; width: 100%; border-left: 0; border-top: 1px solid var(--line); }
+  body.panel-hidden #panel { transform: translateY(100%); }
+  #btn-panel, body.panel-hidden #btn-panel { right: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { #panel, #btn-panel { transition: none; } }
+</style>
+
+<canvas id="stage" aria-label="声音驱动的 3D 画面"></canvas>
+<button id="btn-panel" type="button" title="显示/隐藏面板（H）">面板 H</button>
+
+<aside id="panel">
+  <div class="brand"><h1>Sonic Field</h1><small id="src">无输入</small></div>
+
+  <section>
+    <h2>输入 Input</h2>
+    <select id="device" aria-label="输入设备"></select>
+    <div class="row">
+      <button id="btn-mic" type="button">麦克风</button>
+      <button id="btn-demo" type="button">演示信号</button>
+      <span class="filebtn">音频文件<input id="file" type="file" accept="audio/*"></span>
+      <button id="btn-stop" type="button">停止</button>
+    </div>
+    <div class="ctl"><label for="gain">输入增益</label><input id="gain" type="range" min="0.1" max="8" step="0.05"><output id="gain-v"></output></div>
+    <div class="ctl"><label for="gate">静音门限</label><input id="gate" type="range" min="0" max="0.4" step="0.01"><output id="gate-v"></output></div>
+    <div class="ctl"><label for="onsetK">起音灵敏</label><input id="onsetK" type="range" min="0.6" max="3.5" step="0.05"><output id="onsetK-v"></output></div>
+    <div class="ctl"><label for="dropLow">高能·低频</label><input id="dropLow" type="range" min="0.1" max="0.8" step="0.01"><output id="dropLow-v"></output></div>
+    <div class="ctl"><label for="dropHigh">高能·高频</label><input id="dropHigh" type="range" min="0.05" max="0.5" step="0.01"><output id="dropHigh-v"></output></div>
+    <div id="msg" role="status"></div>
+  </section>
+
+  <section>
+    <h2>时间 · 节奏 · 状态 <span>Time · Rhythm · State</span></h2>
+    <div class="beat">
+      <span id="bpm">120.0</span><span>BPM</span>
+      <span id="phase"><i></i><i></i><i></i><i></i></span>
+      <span id="state" data-state="SILENT">静默 SILENT</span>
+    </div>
+    <div class="row">
+      <button id="btn-tap" type="button">打拍 Tap (T)</button>
+      <label class="check"><input id="bpmAuto" type="checkbox" checked> 自动 BPM</label>
+    </div>
+  </section>
+
+  <section>
+    <h2>声音特征 <span>Features → 控制对象</span></h2>
+    <div id="meters"></div>
+  </section>
+
+  <section>
+    <h2>场景 Scene <span id="scene-name"></span></h2>
+    <div class="row">
+      <button type="button" data-scene="0" title="字形场">A 字形</button>
+      <button type="button" data-scene="1" title="半调体">B 半调</button>
+      <button type="button" data-scene="2" title="唱片隧道">C 隧道</button>
+      <button type="button" data-scene="3" title="笔触流">D 笔触</button>
+      <button type="button" data-scene="4" title="涂鸦巢">E 涂鸦</button>
+    </div>
+    <label class="check"><input id="auto" type="checkbox" checked> 自动：按状态和噪声度切场景，只在小节线上切（A）</label>
+    <input id="text" type="text" value="SONIC FIELD" maxlength="24" aria-label="隧道场景里的文字">
+  </section>
+
+  <section>
+    <h2>映射 Mapping</h2>
+    <div class="ctl"><label for="zDepth">Z 深度</label><input id="zDepth" type="range" min="0" max="2.5" step="0.05"><output id="zDepth-v"></output></div>
+    <div class="ctl"><label for="chaos">混沌量</label><input id="chaos" type="range" min="0" max="2" step="0.05"><output id="chaos-v"></output></div>
+    <div class="ctl"><label for="density">密度偏置</label><input id="density" type="range" min="0" max="1" step="0.01"><output id="density-v"></output></div>
+    <div class="ctl"><label for="beatStep">拍点转镜</label><input id="beatStep" type="range" min="0" max="3" step="0.05"><output id="beatStep-v"></output></div>
+    <div class="ctl"><label for="rowsPerBeat">时间流速</label><input id="rowsPerBeat" type="range" min="1" max="32" step="1"><output id="rowsPerBeat-v"></output></div>
+  </section>
+
+  <section>
+    <h2>后期 Post</h2>
+    <div class="ctl"><label for="edge">描边</label><input id="edge" type="range" min="0" max="1" step="0.01"><output id="edge-v"></output></div>
+    <div class="ctl"><label for="feedback">拖影</label><input id="feedback" type="range" min="0" max="0.95" step="0.01"><output id="feedback-v"></output></div>
+    <div class="ctl"><label for="threshold">二值化</label><input id="threshold" type="range" min="0" max="1" step="0.01"><output id="threshold-v"></output></div>
+    <label class="check"><input id="invertOnOnset" type="checkbox"> 高能段重拍时反相闪白</label>
+  </section>
+
+  <section>
+    <h2>快捷键 Keys</h2>
+    <div class="keys">
+      <kbd>H</kbd><span>隐藏面板</span>
+      <kbd>F</kbd><span>全屏</span>
+      <kbd>T</kbd><span>手动打拍</span>
+      <kbd>1–5</kbd><span>手动选场景 A–E</span>
+      <kbd>A</kbd><span>自动切场景开/关</span>
+    </div>
+  </section>
+</aside>
+
+<div id="start">
+  <div class="card">
+    <h1>Sonic<span>Field</span></h1>
+    <p>声音进来，画面跟着变：频谱铺在 X 轴，时间往 Z 轴深处流，节拍推动镜头，噪声把网格打散。先选一个声音来源。</p>
+    <div class="row">
+      <button id="start-mic" type="button">用麦克风</button>
+      <button id="start-demo" type="button">听演示信号</button>
+      <span class="filebtn">选一个音频文件<input id="start-file" type="file" accept="audio/*"></span>
+    </div>
+    <p>麦克风需要在本地用 Chrome 打开这个页面；在 claude.ai 里预览时只能用演示信号或音频文件。</p>
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/demo.js"></script>
+<script src="js/scenes.js"></script>
+<script src="js/post.js"></script>
+<script src="js/main.js"></script>
+<script src="js/ui.js"></script>
