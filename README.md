@@ -6,6 +6,14 @@
 - 浏览器原型：[`web/`](web/)（Three.js + Web Audio，不用联网，three.js 已经放在 `web/vendor/`）
 - TouchDesigner 版：[`td/`](td/)（一键搭建脚本和一步步测试说明，见 [`td/README.md`](td/README.md)）
 
+## 在线打开（可以用麦克风）
+
+- GitHub Pages：<https://mjingwen058-wq.github.io/claudeonlyu/>
+  第一次需要在仓库 **Settings → Pages → Build and deployment → Source** 里选 **GitHub Actions**。之后每次推送 `web/` 都会自动更新，大约 1 分钟生效。
+- 临时链接（按提交号托管，不需要设置）：`https://rawcdn.githack.com/mjingwen058-wq/claudeonlyu/<提交号>/web/index.html`
+
+打开后点“用麦克风”，浏览器问是否允许时点“允许”。
+
 ## 在本地运行（用麦克风）
 
 浏览器只允许 `localhost` 或 https 页面用麦克风，所以要起一个本地服务器：

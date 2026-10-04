@@ -94,11 +94,29 @@
   bindRange('zDepth', () => M.zDepth, (v) => (M.zDepth = v));
   bindRange('chaos', () => M.chaos, (v) => (M.chaos = v));
   bindRange('density', () => M.density, (v) => (M.density = v));
-  bindRange('beatStep', () => M.beatStep, (v) => (M.beatStep = v));
   bindRange('rowsPerBeat', () => M.rowsPerBeat, (v) => (M.rowsPerBeat = v), (v) => `${v} 行/拍`);
   bindRange('edge', () => M.edge, (v) => (M.edge = v));
   bindRange('feedback', () => M.feedback, (v) => (M.feedback = v));
   bindRange('threshold', () => M.threshold, (v) => (M.threshold = v));
+  // —— 轴映射：9 个控制位（X/Y/Z × 位移/旋转/缩放）——
+  const rig = SF.rig;
+  const slotBox = $('axis-slots');
+  rig.slots.forEach((s) => {
+    const row = document.createElement('div');
+    row.className = 'slot';
+    const opts = rig.sources.map(([k, n]) => `<option value="${k}"${k === s.src ? ' selected' : ''}>${n}</option>`).join('');
+    row.innerHTML = `<label for="src-${s.id}">${s.axis} ${s.kind}</label>` +
+      `<select id="src-${s.id}" aria-label="${s.axis} 轴${s.kind}的声音来源">${opts}</select>` +
+      `<input id="amt-${s.id}" type="range" min="0" max="2" step="0.05" value="${s.amt}" aria-label="${s.axis} 轴${s.kind}的强度">` +
+      `<output id="amt-${s.id}-v">${s.amt.toFixed(2)}</output>`;
+    slotBox.appendChild(row);
+    row.querySelector('select').onchange = (e) => { s.src = e.target.value; s.acc = 0; };
+    const r = row.querySelector('input'), o = row.querySelector('output');
+    r.oninput = () => { s.amt = parseFloat(r.value); o.textContent = s.amt.toFixed(2); };
+  });
+  $('agc').onchange = (e) => (rig.agc = e.target.checked);
+  bindRange('axisSpeed', () => rig.speed, (v) => (rig.speed = v), (v) => v.toFixed(1));
+
   $('invertOnOnset').checked = M.invertOnOnset;
   $('invertOnOnset').onchange = (e) => (M.invertOnOnset = e.target.checked);
 

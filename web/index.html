@@ -1,3 +1,4 @@
+<!doctype html>
 <title>Sonic Field VJ</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -94,7 +95,25 @@ kbd { font: inherit; border: 1px solid var(--line); padding: 0 4px; color: var(-
 #start p { margin: 0; color: var(--dim); max-width: 46ch; font-size: 13px; }
 #start .row button, #start .row .filebtn { padding: 10px 14px; font-size: 13px; }
 
+/* 左下角 XYZ 指示：三根轴随声音转动和伸缩，右边是每个轴的 位移 / 旋转 / 缩放 读数 */
+#axis-hud {
+  position: fixed; left: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 2;
+  display: flex; align-items: center; gap: 10px; pointer-events: none;
+  background: color-mix(in srgb, var(--ink) 70%, transparent); border: 1px solid var(--line); padding: 6px 10px 6px 6px;
+}
+#gizmo { width: 110px; height: 110px; display: block; }
+#axis-readout { display: grid; grid-template-columns: auto auto auto auto; gap: 3px 10px; font-variant-numeric: tabular-nums; text-align: right; }
+#axis-readout .ax { font-weight: 500; text-align: left; }
+body.panel-hidden #axis-hud { opacity: .85; }
+.slot { display: grid; grid-template-columns: 58px 1fr 1fr 40px; gap: 6px; align-items: center; }
+.slot label { color: var(--dim); white-space: nowrap; }
+.slot select { padding: 4px 4px; min-width: 0; }
+.slot output { text-align: right; font-variant-numeric: tabular-nums; }
+#axis-slots { display: flex; flex-direction: column; gap: 5px; }
+
 @media (max-width: 640px) {
+  #axis-hud { bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+  #gizmo { width: 80px; height: 80px; }
   #panel { top: auto; height: 58%; width: 100%; border-left: 0; border-top: 1px solid var(--line); }
   body.panel-hidden #panel { transform: translateY(100%); }
   #btn-panel, body.panel-hidden #btn-panel { right: 12px; }
@@ -104,6 +123,11 @@ kbd { font: inherit; border: 1px solid var(--line); padding: 0 4px; color: var(-
 
 <canvas id="stage" aria-label="声音驱动的 3D 画面"></canvas>
 <button id="btn-panel" type="button" title="显示/隐藏面板（H）">面板 H</button>
+
+<div id="axis-hud" aria-label="XYZ 轴状态">
+  <canvas id="gizmo"></canvas>
+  <div id="axis-readout"></div>
+</div>
 
 <aside id="panel">
   <div class="brand"><h1>Sonic Field</h1><small id="src">无输入</small></div>
@@ -157,11 +181,17 @@ kbd { font: inherit; border: 1px solid var(--line); padding: 0 4px; color: var(-
   </section>
 
   <section>
-    <h2>映射 Mapping</h2>
+    <h2>轴映射 Axes <span>X · Y · Z</span></h2>
+    <label class="check"><input id="agc" type="checkbox" checked> 自动增益：小音量也能把轴推满</label>
+    <div class="ctl"><label for="axisSpeed">轴响应速度</label><input id="axisSpeed" type="range" min="1" max="24" step="0.5"><output id="axisSpeed-v"></output></div>
+    <div id="axis-slots"></div>
+  </section>
+
+  <section>
+    <h2>场景内映射 Scene mapping</h2>
     <div class="ctl"><label for="zDepth">Z 深度</label><input id="zDepth" type="range" min="0" max="2.5" step="0.05"><output id="zDepth-v"></output></div>
     <div class="ctl"><label for="chaos">混沌量</label><input id="chaos" type="range" min="0" max="2" step="0.05"><output id="chaos-v"></output></div>
     <div class="ctl"><label for="density">密度偏置</label><input id="density" type="range" min="0" max="1" step="0.01"><output id="density-v"></output></div>
-    <div class="ctl"><label for="beatStep">拍点转镜</label><input id="beatStep" type="range" min="0" max="3" step="0.05"><output id="beatStep-v"></output></div>
     <div class="ctl"><label for="rowsPerBeat">时间流速</label><input id="rowsPerBeat" type="range" min="1" max="32" step="1"><output id="rowsPerBeat-v"></output></div>
   </section>
 
@@ -188,13 +218,13 @@ kbd { font: inherit; border: 1px solid var(--line); padding: 0 4px; color: var(-
 <div id="start">
   <div class="card">
     <h1>Sonic<span>Field</span></h1>
-    <p>声音进来，画面跟着变：频谱铺在 X 轴，时间往 Z 轴深处流，节拍推动镜头，噪声把网格打散。先选一个声音来源。</p>
+    <p>声音进来，空间跟着变：X、Y、Z 三个轴的位移、旋转、缩放都由声音驱动，频谱铺在横向，时间往纵深流，噪声把网格打散。先选一个声音来源。</p>
     <div class="row">
       <button id="start-mic" type="button">用麦克风</button>
       <button id="start-demo" type="button">听演示信号</button>
       <span class="filebtn">选一个音频文件<input id="start-file" type="file" accept="audio/*"></span>
     </div>
-    <p>麦克风需要在本地用 Chrome 打开这个页面；在 claude.ai 里预览时只能用演示信号或音频文件。</p>
+    <p>浏览器会询问是否允许使用麦克风，点“允许”。在 claude.ai 里预览时不能用麦克风，只能用演示信号或音频文件。</p>
   </div>
 </div>
 
@@ -203,5 +233,6 @@ kbd { font: inherit; border: 1px solid var(--line); padding: 0 4px; color: var(-
 <script src="js/demo.js"></script>
 <script src="js/scenes.js"></script>
 <script src="js/post.js"></script>
+<script src="js/axes.js"></script>
 <script src="js/main.js"></script>
 <script src="js/ui.js"></script>
