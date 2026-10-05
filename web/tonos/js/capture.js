@@ -2,7 +2,7 @@
 // 模型和 WASM 放在仓库里；本地加载失败时再退到 CDN。识别后镜像坐标，并按质心最近邻分配稳定 ID。
 
 const LOCAL = {
-  bundle: './vendor/mediapipe/vision_bundle.mjs',
+  bundle: './vendor/mediapipe/vision_bundle.js',
   loader: './vendor/mediapipe/wasm/vision_wasm_internal.js',
   binary: './vendor/mediapipe/wasm/vision_wasm_internal.wasm',
   model: './models/pose_landmarker_lite.task',

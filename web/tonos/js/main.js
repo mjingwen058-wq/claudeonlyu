@@ -139,7 +139,7 @@ function onMindEvent(e) {
 let last = performance.now();
 let crashed = false;
 function frame(ts) {
-  const dt = Math.min(0.1, Math.max(0, (ts - last) / 1000));
+  const dt = Math.min(0.25, Math.max(0, (ts - last) / 1000));
   last = ts;
   try {
     const a = app;

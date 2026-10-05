@@ -1,0 +1,13 @@
+MediaPipe Tasks Vision 1.0.1 (@mediapipe/tasks-vision on npm)
+Copyright The MediaPipe Authors. Licensed under the Apache License, Version 2.0.
+https://www.apache.org/licenses/LICENSE-2.0
+
+Files copied here unchanged, except vision_bundle.mjs renamed to vision_bundle.js
+and its source-map comment removed:
+  vision_bundle.js
+  wasm/vision_wasm_internal.js
+  wasm/vision_wasm_internal.wasm
+
+The pose model in ../../models/pose_landmarker_lite.task comes from
+https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/
+(MediaPipe Pose Landmarker, Apache License 2.0).

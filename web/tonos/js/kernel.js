@@ -36,7 +36,7 @@ export const SETPOINT_RANGE = {
 };
 
 const BASE = { arousal: 0.22, boundary: 0.9, fullness: 0.35, wear: 0.1 };
-const PARAMS = { kA: 4.0, cA: 1.1, gainA: 3.0, kB: 0.35, cB: 0.85, gainB: 0.3, breathHz: 0.12, breathAmp: 0.3, noise: 0.2 };
+const PARAMS = { kA: 4.0, cA: 1.1, gainA: 2.5, kB: 0.35, cB: 0.85, gainB: 0.3, breathHz: 0.12, breathAmp: 0.3, noise: 0.2 };
 
 export class Kernel {
   constructor() {

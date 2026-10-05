@@ -330,8 +330,14 @@ export class UI {
         box.appendChild(s);
         this.spans.set(word, s);
       }
-      s.style.left = `${((w.x + 1) / 2) * 84 + 8}%`;
-      s.style.top = `${(1 - (w.y + 1) / 2) * 76 + 12}%`;
+      const pos = this.cloudPos?.get(word);
+      if (pos) {
+        s.style.left = `${pos.x.toFixed(1)}px`;
+        s.style.top = `${pos.y.toFixed(1)}px`;
+      } else {
+        s.style.left = `${((w.x + 1) / 2) * 84 + 8}%`;
+        s.style.top = `${(1 - (w.y + 1) / 2) * 76 + 12}%`;
+      }
       s.style.fontSize = `${11 + 20 * w.weight}px`;
       s.style.opacity = `${0.35 + 0.65 * w.weight}`;
       s.title = `${word} · 权重 ${w.weight.toFixed(2)} · ${CATEGORIES[w.category]} · 情绪 ${w.valence.toFixed(1)}`;
@@ -456,6 +462,7 @@ export class UI {
     });
 
     // ⑤ 表达
+    this.layoutCloud();
     const P = a.body.params;
     $('img-params').textContent = P ? `F ${P.F.toFixed(4)} · k ${P.K.toFixed(4)} · ${P.steps} 步/帧` : '';
     $('lex-count').textContent = `${a.lexicon.words.size} 个词 · 权重按天衰减`;
@@ -487,6 +494,46 @@ export class UI {
     $('pipe-4').textContent = !m.enabled ? '认知层关闭' : m.busy ? '思考中…' : `休眠 · 已唤醒 ${m.wakes} 次`;
     $('pipe-5').textContent = `${SOUND_STATES[s.state]} · ${ENSEMBLES[s.ensemble]} · ${a.lexicon.words.size} 词`;
     $('expo-hud').textContent = `${a.clock.label()} · ${MODES[k.mode].name} · ${F.count} 人 · 声音 ${SOUND_STATES[s.state]} · 按 V 返回全流程`;
+  }
+
+  // 词条按语义坐标摆放，再把重叠的标签推开（几轮简单松弛）
+  layoutCloud() {
+    const box = $('cloud');
+    const W = box.clientWidth, H = box.clientHeight;
+    if (!W || !H) return;
+    const items = [...this.app.lexicon.words.values()].map((w) => {
+      const fs = 11 + 20 * w.weight;
+      return {
+        word: w.word,
+        x: (((w.x + 1) / 2) * 0.84 + 0.08) * W,
+        y: ((1 - (w.y + 1) / 2) * 0.76 + 0.12) * H,
+        w: fs * [...w.word].length * 1.02 + 8,
+        h: fs * 1.3,
+      };
+    });
+    for (let it = 0; it < 14; it++) {
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const a = items[i], b = items[j];
+          const dx = b.x - a.x, dy = b.y - a.y;
+          const ox = (a.w + b.w) / 2 - Math.abs(dx);
+          const oy = (a.h + b.h) / 2 - Math.abs(dy);
+          if (ox <= 0 || oy <= 0) continue;
+          if (ox < oy) {
+            const sx = (dx > 0 || (dx === 0 && i % 2) ? 1 : -1) * ox / 2;
+            a.x -= sx; b.x += sx;
+          } else {
+            const sy = (dy > 0 || (dy === 0 && i % 2) ? 1 : -1) * oy / 2;
+            a.y -= sy; b.y += sy;
+          }
+        }
+      }
+      for (const p of items) {
+        p.x = Math.min(W - p.w / 2, Math.max(p.w / 2, p.x));
+        p.y = Math.min(H - p.h / 2, Math.max(p.h / 2, p.y));
+      }
+    }
+    this.cloudPos = new Map(items.map((p) => [p.word, p]));
   }
 
   toolArgs(e) {

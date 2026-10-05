@@ -1,3 +1,24 @@
+# TONOS 全流程 Demo
+
+以展厅为身体的人工生命，按《TONOS 交互逻辑与技术方案》在一台电脑上跑通：电脑摄像头代替摄像头节点，电脑扬声器代替 4 个发声节点。代码在 [`web/tonos/`](web/tonos/)。
+
+| 层 | 浏览器里怎么做 |
+|---|---|
+| ① 采集 | MediaPipe Pose（最多 4 人，模型和 WASM 已放进仓库）+ 质心最近邻追踪，给每人稳定 ID；另有 4 个模拟观众场景 |
+| ② 转换 | 7 个扰动特征，30 Hz 发给内核；每 20 秒一次行为模式摘要，只交给 LLM |
+| ③ 内核 | 6 个变量：唤醒、边界完整度用欠阻尼二阶系统，充盈度、损耗、沉积用一阶累积—泄漏，新奇度用 CBLA 学习进展；5 种模式的状态机带滞回和最短停留 |
+| ④ 认知 | 4 个唤醒条件；内感受报告；5 个工具的限制写在代码里强制执行。默认是规则模拟解释器，填自己的 Anthropic API Key 可换成真实 Claude |
+| ⑤ 表达 | 声音：物理世界里碰撞发声 + 声音状态机 + 5 种合奏；词库：语义坐标排布，大小 = 权重；图像：WebGL2 反应-扩散，内核驱动参数 |
+
+打开后点"自动演示"，约 3 分钟走完全流程；或者点"开摄像头，自己试"。点"闭馆 → 下一天"可以看沉积、设定点漂移和记忆压缩，状态存在浏览器本地，刷新后接着上一天。
+
+- 在线入口（不用设置，可以用摄像头）：`https://rawcdn.githack.com/mjingwen058-wq/claudeonlyu/<提交号>/web/tonos/index.html`
+- GitHub Pages 打开以后：<https://mjingwen058-wq.github.io/claudeonlyu/tonos/>
+- 本地：`cd web && python3 -m http.server 8000`，再用 Chrome 打开 <http://localhost:8000/tonos/>
+- 测试：`node --test tests/tonos-kernel.test.mjs`；`node tests/tonos-sim-run.mjs` 打印模拟观众经过每一层的数值
+
+---
+
 # Sonic Field
 
 声音驱动的 3D 黑白 VJ 视觉。麦克风收音 → 提取 10 个声音特征 → 驱动五个 3D 场景（条码层、数据地形、波形隧道、笔触流、涂鸦巢），视觉方向参考池田亮司的纯黑白数据美学。

@@ -11,7 +11,7 @@ const STEPS = [
   { t: 72, run: (a) => { if (a.mind.wakes === a.demoWakes) a.mind.forceWake('pressure'); } },
   { t: 79, panel: 'p-tools', text: '④ 它只能调用受限的工具：新词每次最多 3 个，开口有冷却，设定点每次最多 ±0.15。超出的部分被截断。' },
   { t: 93, panel: 'p-lexicon', text: '⑤ 新词浮到上空；话语不念出来，而是变成每个词的动机，在节点之间接力奏出，对应的词同时亮起。' },
-  { t: 105, panel: 'p-features', text: '多人同步举手：同步性推动唤醒（共振），合奏方式跟着内核状态变化。', run: (a) => a.crowd.scenario('sync') },
+  { t: 105, panel: 'p-features', text: '多人同步举手：同步性推动唤醒（共振），合奏方式跟着内核状态变化。', run: (a) => { a.crowd.scenario('clear'); a.crowd.scenario('sync'); } },
   { t: 127, panel: 'p-image', text: '人离开：声音散回自语，图像慢慢归于平静，但不是复位。', run: (a) => a.crowd.scenario('clear') },
   { t: 141, panel: 'p-learn', text: '学不到新东西时停滞上升，到阈值就自发突变，带着新节律回到静息。（演示里把停滞调快了。）', run: (a) => { a.kernel.stag = Math.max(a.kernel.stag, 0.66); } },
   { t: 158, panel: 'p-kernel', text: '闭馆：沉积累加，设定点逐日漂移，词条按天衰减，当天记忆压成摘要并存盘。', run: (a) => a.closeDay() },
@@ -33,6 +33,7 @@ export class Demo {
   start() {
     this.on = true;
     this.t = 0;
+    this.t0 = performance.now();
     this.i = 0;
     this.n = 0;
     document.getElementById('caption').hidden = false;
@@ -47,7 +48,8 @@ export class Demo {
 
   update(dt) {
     if (!this.on) return;
-    this.t += dt;
+    // 用真实时间推进剧本：机器慢、帧率低时字幕也不会拖慢
+    this.t = (performance.now() - this.t0) / 1000;
     while (this.i < STEPS.length && STEPS[this.i].t <= this.t) {
       const s = STEPS[this.i++];
       if (s.end) { this.stop(); return; }

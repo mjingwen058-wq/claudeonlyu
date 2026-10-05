@@ -4,7 +4,7 @@ name: Deploy web to Pages
 
 on:
   push:
-    branches: [claude/magical-pascal-mbuwh7, main]
+    branches: [claude/magical-pascal-mbuwh7, claude/peaceful-shannon-fly8rs, main]
     paths: [web/**, .github/workflows/pages.yml]
   workflow_dispatch:
 

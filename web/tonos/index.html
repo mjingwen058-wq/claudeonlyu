@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>TONOS 全流程 Demo</title>
+<link rel="icon" href="data:,">
 <style>
 /* 布局：顶栏 + 控制条 + 五段流水线 + 四列面板（①② 采集转换 / ③ 内核 / ④ 认知 / ⑤ 表达）；窄屏逐级变成两列、一列。
    展厅视图：只留图像和词库，按文档 1.5 的高度分层铺满全屏。 */
@@ -191,7 +192,7 @@ pre#report {
 .cloud { position: relative; height: 170px; border: 1px solid var(--line); background: radial-gradient(ellipse at 50% 120%, #151a20 0%, #0b0d0f 70%); overflow: hidden; }
 .cloud span {
   position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: var(--ink);
-  transition: font-size .8s, opacity .8s, color .3s, text-shadow .3s; animation: drift 9s ease-in-out infinite alternate;
+  transition: left .8s, top .8s, font-size .8s, opacity .8s, color .3s, text-shadow .3s; animation: drift 9s ease-in-out infinite alternate;
 }
 .cloud span.lit { color: var(--flow); text-shadow: 0 0 12px rgba(141,180,255,.8); }
 .cloud .empty { color: var(--faint); font-size: 11px; left: 50%; top: 50%; animation: none; }
