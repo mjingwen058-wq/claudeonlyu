@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TONOS 全流程 Demo</title>
+<style>
+/* 布局：顶栏 + 控制条 + 五段流水线 + 四列面板（①② 采集转换 / ③ 内核 / ④ 认知 / ⑤ 表达）；窄屏逐级变成两列、一列。
+   展厅视图：只留图像和词库，按文档 1.5 的高度分层铺满全屏。 */
+:root {
+  --ground: #0d0f11;   /* 页面底色：暗室 */
+  --panel: #13161a;    /* 面板 */
+  --well: #1a1e23;     /* 控件、条形图底 */
+  --line: #262b31;     /* 细线 */
+  --ink: #e7e3d9;      /* 主文字：骨白 */
+  --dim: #8a9097;      /* 次要文字 */
+  --faint: #596067;    /* 更弱的标注 */
+  --flow: #8db4ff;     /* 数据流 / 借鉴：沿用文档里的蓝 */
+  --m-rest: #a8bfd6;   /* 五种行为模式的颜色，也用于图像 */
+  --m-withdraw: #ff806e;
+  --m-explore: #f5b85c;
+  --m-sleep: #9e8ddb;
+  --m-mutate: #74d9b3;
+  --ok: #74d9b3;
+  --warn: #f5b85c;
+  --bad: #ff806e;
+  --font-ui: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", system-ui, sans-serif;
+  --font-data: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  background: var(--ground); color: var(--ink);
+  font: 12.5px/1.5 var(--font-ui);
+  padding-inline: 16px; padding-block: 0 24px;
+  -webkit-font-smoothing: antialiased;
+}
+button, select, input { font: inherit; color: var(--ink); }
+button, select {
+  background: var(--well); border: 1px solid var(--line); border-radius: 3px;
+  padding: 4px 9px; cursor: pointer; white-space: nowrap;
+}
+button:hover, select:hover { border-color: var(--dim); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 1px solid var(--flow); outline-offset: 2px; }
+button.on { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+button.primary { background: var(--flow); color: #0b1220; border-color: var(--flow); font-weight: 600; }
+button:disabled { opacity: .45; cursor: default; }
+input[type=range] { accent-color: var(--ink); width: 90px; vertical-align: middle; }
+input[type=password], input[type=text] {
+  background: var(--well); border: 1px solid var(--line); border-radius: 3px; padding: 4px 8px; min-width: 0;
+}
+
+/* 顶栏 */
+#top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding-block: 10px 8px; background: var(--ground); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex: 1 1 auto; }
+.brand b { font: 600 15px/1 var(--font-data); letter-spacing: .38em; }
+.brand span { color: var(--dim); }
+.clockbox { display: flex; align-items: center; gap: 8px; font-family: var(--font-data); }
+#clock { font-size: 15px; font-variant-numeric: tabular-nums; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid currentColor; font-size: 11.5px; line-height: 1.5; white-space: nowrap;
+}
+.chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.views { display: flex; gap: 0; }
+.views button { border-radius: 0; }
+.views button:first-child { border-radius: 3px 0 0 3px; }
+.views button:last-child { border-radius: 0 3px 3px 0; border-left: 0; }
+
+/* 控制条 */
+#controls { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-block: 10px; border-bottom: 1px solid var(--line); }
+.grp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lbl { color: var(--faint); font-size: 11px; letter-spacing: .06em; margin-right: 2px; }
+#claude-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-block: 8px; border-bottom: 1px solid var(--line); color: var(--dim); }
+#claude-row input { width: 300px; max-width: 100%; }
+
+/* 流水线 */
+#pipe { list-style: none; margin: 0; padding: 12px 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+#pipe li {
+  position: relative; padding: 8px 10px; border: 1px solid var(--line); border-radius: 3px;
+  background: linear-gradient(90deg, rgba(141,180,255,var(--act, 0)) 0%, rgba(141,180,255,0) 100%), var(--panel);
+  transition: border-color .2s;
+  min-width: 0;
+}
+#pipe li.hot { border-color: var(--flow); }
+#pipe li:not(:last-child)::after {
+  content: "→"; position: absolute; right: -10px; top: 50%; transform: translate(50%, -50%);
+  color: var(--faint); font-family: var(--font-data);
+}
+#pipe b { display: block; font-weight: 600; font-size: 12.5px; }
+#pipe b i { font-style: normal; color: var(--flow); margin-right: 4px; }
+#pipe span { display: block; color: var(--dim); font-family: var(--font-data); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 四列 */
+#grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 10px 12px 12px; min-width: 0; transition: outline-color .3s, box-shadow .3s; outline: 1px solid transparent; }
+.panel.spot { outline-color: var(--flow); box-shadow: 0 0 0 4px rgba(141,180,255,.14); }
+.panel h2 {
+  margin: 0 0 8px; font-size: 13px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  text-wrap: balance;
+}
+.panel h2 i { font-style: normal; color: var(--flow); }
+.panel h2 small, .panel h3 small { margin-left: auto; color: var(--dim); font-weight: 400; font-size: 11px; font-family: var(--font-data); }
+.panel h3 { margin: 12px 0 6px; font-size: 12px; font-weight: 600; color: var(--dim); display: flex; gap: 8px; }
+.note { margin: 8px 0 0; color: var(--faint); font-size: 11px; }
+.tag { font-size: 10px; color: var(--dim); border: 1px solid var(--line); border-radius: 2px; padding: 0 4px; margin-left: 4px; font-weight: 400; }
+
+/* ① 摄像头 */
+.cam { position: relative; aspect-ratio: 4 / 3; background: #08090a; border: 1px solid var(--line); overflow: hidden; max-width: 100%; }
+.cam video { display: none; }
+.cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cam-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 11.5px; text-align: center; padding: 16px; pointer-events: none; }
+.people { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-family: var(--font-data); font-size: 11px; color: var(--dim); min-height: 18px; }
+.people b { color: var(--ink); font-weight: 600; margin-right: 6px; }
+
+/* 条形 + 走势 */
+.frow, .vrow, .wrow, .srow {
+  display: grid; align-items: center; gap: 6px; font-variant-numeric: tabular-nums;
+}
+.frow { grid-template-columns: 84px minmax(30px, 1fr) 34px 64px; padding-block: 3px; border-bottom: 1px dashed var(--line); }
+.frow .to { grid-column: 1 / -1; color: var(--faint); font-size: 10.5px; margin-top: -2px; }
+.bar { position: relative; height: 6px; background: var(--well); border-radius: 1px; overflow: hidden; }
+.bar b { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--ink); }
+.val { text-align: right; font-family: var(--font-data); font-size: 11px; }
+canvas.spark { width: 100%; height: 18px; display: block; }
+.osc { display: block; margin-top: 8px; font: 10.5px/1.4 var(--font-data); color: var(--flow); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.vrow { grid-template-columns: 1fr 40px; padding-block: 5px 6px; border-bottom: 1px dashed var(--line); }
+.vrow .nm { font-weight: 600; }
+.vrow canvas { grid-column: 1 / -1; width: 100%; height: 30px; display: block; }
+.vrow .see { grid-column: 1 / -1; color: var(--faint); font-size: 10.5px; margin-top: -2px; }
+
+/* 状态机图 */
+svg.sm { width: 100%; height: auto; display: block; font-family: var(--font-ui); }
+svg.sm text { fill: var(--ink); }
+svg.sm .sub { fill: var(--dim); font-size: 9.5px; }
+svg.sm .ln { stroke: var(--faint); fill: none; stroke-width: 1.1; }
+svg.sm .ret { stroke: var(--flow); fill: none; stroke-width: 1.2; }
+svg.sm .bx { fill: transparent; stroke: var(--faint); stroke-width: 1.1; transition: fill .3s, stroke .3s; }
+svg.sm .dm { fill: transparent; stroke: var(--faint); stroke-width: 1.1; }
+svg.sm g.on .bx { stroke-width: 2; }
+svg.sm .acc { fill: var(--flow); font-size: 9.5px; }
+svg.sm .mk { fill: var(--faint); }
+
+.srow { grid-template-columns: 74px minmax(40px, 1fr) 32px 44px; padding-block: 2px; font-size: 11.5px; }
+.srow .bar { height: 8px; overflow: visible; }
+.srow .bar::before, .srow .bar::after { content: ""; position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--dim); }
+.srow .bar::before { left: 55%; opacity: .5; }
+.srow .bar::after { left: 70%; }
+.srow .bias { color: var(--faint); font-family: var(--font-data); font-size: 10.5px; text-align: right; }
+
+.kv { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--font-data); font-size: 11px; color: var(--dim); margin-top: 6px; }
+.kv b { color: var(--ink); font-weight: 500; }
+
+/* 日志 */
+.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 190px; overflow-y: auto; font-size: 11.5px; }
+.log li { padding: 4px 0 4px 8px; border-left: 2px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
+.log li time { color: var(--faint); font-family: var(--font-data); font-size: 10.5px; margin-right: 6px; }
+.log.small { max-height: 130px; font-size: 11px; }
+.log.osc li { font: 10.5px/1.35 var(--font-data); color: var(--dim); border-left-color: transparent; padding: 1px 0; }
+.st { display: inline-block; font-size: 10px; padding: 0 5px; border-radius: 2px; margin-left: 4px; border: 1px solid currentColor; }
+.st.ok { color: var(--ok); }
+.st.truncated { color: var(--warn); }
+.st.rejected { color: var(--bad); }
+.st.skipped { color: var(--dim); }
+.tool { font-family: var(--font-data); color: var(--flow); }
+.args { display: block; color: var(--dim); font-family: var(--font-data); font-size: 10.5px; }
+
+.wrow { grid-template-columns: 74px minmax(40px, 1fr) 34px; padding-block: 3px; }
+.wrow .desc { grid-column: 1 / -1; color: var(--faint); font-size: 10.5px; margin-top: -3px; }
+.wrow.fire .bar b { background: var(--flow); }
+pre#report {
+  margin: 0; background: #0b0d0f; border: 1px solid var(--line); padding: 8px; max-height: 260px; overflow: auto;
+  font: 10.5px/1.45 var(--font-data); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.imp { display: inline-block; min-width: 18px; text-align: center; font-family: var(--font-data); font-size: 10px; border-radius: 2px; background: var(--well); margin-right: 6px; }
+
+/* ⑤ 图像 */
+.stage { position: relative; aspect-ratio: 16 / 10; background: #0a0b0d; border: 1px solid var(--line); overflow: hidden; max-width: 100%; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.stage .fail { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); padding: 16px; text-align: center; }
+
+/* 词库 */
+.cloud { position: relative; height: 170px; border: 1px solid var(--line); background: radial-gradient(ellipse at 50% 120%, #151a20 0%, #0b0d0f 70%); overflow: hidden; }
+.cloud span {
+  position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: var(--ink);
+  transition: font-size .8s, opacity .8s, color .3s, text-shadow .3s; animation: drift 9s ease-in-out infinite alternate;
+}
+.cloud span.lit { color: var(--flow); text-shadow: 0 0 12px rgba(141,180,255,.8); }
+.cloud .empty { color: var(--faint); font-size: 11px; left: 50%; top: 50%; animation: none; }
+@keyframes drift { from { margin-top: -3px; } to { margin-top: 3px; } }
+#trajectory li b { color: var(--flow); font-weight: 500; }
+
+/* 声音 */
+#phys-cv { width: 100%; aspect-ratio: 10 / 6; display: block; background: #0b0d0f; border: 1px solid var(--line); margin-top: 8px; }
+
+/* 展厅视图 */
+body.expo #controls, body.expo #pipe, body.expo #claude-row { display: none !important; }
+body.expo .col > .panel:not(#p-image):not(#p-lexicon) { display: none; }
+body.expo #p-image { position: fixed; inset: 0; z-index: 10; border: 0; border-radius: 0; padding: 0; background: #000; }
+body.expo #p-image h2 { display: none; }
+body.expo #p-image .stage { height: 100%; aspect-ratio: auto; border: 0; }
+body.expo #p-lexicon { position: fixed; left: 0; right: 0; top: 54px; z-index: 11; background: transparent; border: 0; padding: 0; pointer-events: none; }
+body.expo #p-lexicon > :not(.cloud) { display: none; }
+body.expo .cloud { height: 26vh; border: 0; background: linear-gradient(#000c, #0000); }
+body.expo .cloud span { text-shadow: 0 0 10px #000; }
+body.expo #top { background: rgba(0,0,0,.6); border-bottom-color: transparent; position: fixed; left: 0; right: 0; padding-inline: 16px; }
+body.expo #expo-hud { display: block; }
+#expo-hud { display: none; position: fixed; z-index: 12; left: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); font: 11px/1.5 var(--font-data); color: var(--dim); }
+
+/* 演示字幕 */
+#caption {
+  position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  width: min(760px, calc(100% - 32px)); background: rgba(12,14,17,.95); border: 1px solid var(--flow); border-radius: 4px;
+  padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start; box-shadow: 0 10px 40px rgba(0,0,0,.5);
+}
+#caption .n { font-family: var(--font-data); color: var(--flow); font-size: 11px; padding-top: 2px; white-space: nowrap; }
+#caption p { margin: 0; flex: 1; font-size: 13.5px; line-height: 1.6; text-wrap: pretty; }
+
+/* 开始界面 */
+#start { position: fixed; inset: 0; z-index: 40; background: rgba(9,10,12,.96); display: grid; place-items: center; padding: 16px; overflow-y: auto; }
+#start .card { max-width: 640px; width: 100%; }
+#start h1 { font: 600 34px/1 var(--font-data); letter-spacing: .4em; margin: 0 0 10px; }
+#start .lead { color: var(--dim); margin: 0 0 18px; font-size: 14px; }
+#start p { max-width: 62ch; }
+#start .flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 18px 0; }
+#start .flow div { border: 1px solid var(--line); padding: 8px; border-radius: 3px; font-size: 11.5px; color: var(--dim); }
+#start .flow b { display: block; color: var(--ink); font-size: 12.5px; }
+#start .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 12px; }
+#start .actions button { padding: 9px 16px; font-size: 13.5px; }
+#start .fine { color: var(--faint); font-size: 11.5px; }
+#start .err { color: var(--bad); }
+
+@media (max-width: 1280px) { #grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+  #grid { grid-template-columns: minmax(0, 1fr); }
+  #pipe { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #pipe li::after { display: none; }
+  #start .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .brand span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cloud span { animation: none; }
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header id="top">
+  <div class="brand"><b>TONOS</b><span>以展厅为身体的人工生命 · 浏览器 demo</span></div>
+  <div class="clockbox"><span id="clock">D1 10:00</span><span id="mode-chip" class="chip" style="color: var(--m-rest)">静息</span></div>
+  <div class="views"><button id="v-flow" class="on" type="button">全流程</button><button id="v-expo" type="button">展厅</button></div>
+</header>
+
+<nav id="controls" aria-label="控制">
+  <div class="grp"><span class="lbl">输入</span>
+    <button id="btn-cam" type="button">开摄像头</button>
+    <select id="calib" aria-label="距离标定"><option value="desk">桌面距离（坐在电脑前）</option><option value="hall">展厅距离（站远处）</option></select>
+  </div>
+  <div class="grp" id="scenarios"><span class="lbl">模拟观众</span></div>
+  <div class="grp"><span class="lbl">时间</span>
+    <button id="btn-speed" type="button">演示加速 60×</button>
+    <button id="btn-close" type="button">闭馆 → 下一天</button>
+  </div>
+  <div class="grp"><span class="lbl">认知</span>
+    <button id="btn-mind" type="button" class="on">认知层 开</button>
+    <select id="engine" aria-label="解释器"><option value="sim">规则模拟解释器</option><option value="claude">真实 Claude（需 Key）</option></select>
+    <button id="btn-wake" type="button">立即唤醒</button>
+  </div>
+  <div class="grp"><span class="lbl">声音</span>
+    <button id="btn-sound" type="button">声音 开</button>
+    <input id="vol" type="range" min="0" max="1" step="0.01" value="0.7" aria-label="音量">
+  </div>
+  <div class="grp">
+    <button id="btn-demo" type="button" class="primary">自动演示</button>
+    <button id="btn-reset" type="button">重置展期</button>
+  </div>
+</nav>
+<div id="claude-row" hidden>
+  <label for="api-key">Anthropic API Key</label>
+  <input id="api-key" type="password" placeholder="sk-ant-…" autocomplete="off">
+  <select id="model" aria-label="模型"></select>
+  <span>Key 只保存在你这台电脑的浏览器里，直接发给 api.anthropic.com。</span>
+</div>
+
+<ol id="pipe">
+  <li data-s="1"><b><i>①</i>采集</b><span id="pipe-1">没有人</span></li>
+  <li data-s="2"><b><i>②</i>转换</b><span id="pipe-2">/perturb 30Hz</span></li>
+  <li data-s="3"><b><i>③</i>内核</b><span id="pipe-3">静息</span></li>
+  <li data-s="4"><b><i>④</i>认知</b><span id="pipe-4">休眠中</span></li>
+  <li data-s="5"><b><i>⑤</i>表达</b><span id="pipe-5">自语</span></li>
+</ol>
+
+<main id="grid">
+  <section class="col">
+    <article class="panel" id="p-capture">
+      <h2><i>①</i>采集 · 骨骼绑定 <small id="cap-status">摄像头未开启</small></h2>
+      <div class="cam">
+        <video id="video" playsinline muted></video>
+        <canvas id="cam-cv"></canvas>
+        <div class="cam-empty" id="cam-empty">没有画面<br>开摄像头，或在上方点一个模拟观众场景</div>
+      </div>
+      <ul id="people" class="people"></ul>
+    </article>
+    <article class="panel" id="p-features">
+      <h2><i>②</i>转换 · 扰动向量 <small>/perturb · 30 Hz → 内核</small></h2>
+      <div id="feat-rows"></div>
+      <code id="perturb-line" class="osc">/perturb …</code>
+      <h3>行为模式摘要 <small id="pat-next">每 20 秒</small></h3>
+      <ol id="patterns" class="log small"></ol>
+      <p class="note">摘要不进内核，只在 LLM 被唤醒时交给它：内核感受到的是数值，它"脑子里"形成的是语义。</p>
+    </article>
+  </section>
+
+  <section class="col">
+    <article class="panel" id="p-kernel">
+      <h2><i>③</i>内核 · 6 个变量 <small>实线 = 当前值 · 虚线 = 设定点 · 近 60 秒</small></h2>
+      <div id="var-rows"></div>
+    </article>
+    <article class="panel" id="p-state">
+      <h2>状态机 <small id="mode-time"></small></h2>
+      <div id="sm-kernel"></div>
+      <div id="score-rows"></div>
+      <p class="note">偏离最大的变量决定模式。竖线：退出 0.55 / 进入 0.70；每种模式至少停留 20 秒（防抖）。</p>
+    </article>
+    <article class="panel" id="p-learn">
+      <h2>新奇度 · 学习进展 <small>LP = 近期平均误差 − 当前平均误差</small></h2>
+      <canvas id="lp-cv" class="spark" style="height:46px"></canvas>
+      <div class="kv"><span>预测误差 e <b id="k-err">0</b></span><span>LP <b id="k-lp">0</b></span><span>停滞 <b id="k-stag">0</b></span></div>
+      <h3>内核日志</h3>
+      <ol id="kernel-log" class="log small"></ol>
+    </article>
+  </section>
+
+  <section class="col">
+    <article class="panel" id="p-mind">
+      <h2><i>④</i>认知 · 慢循环 <small id="mind-status">休眠中</small></h2>
+      <div id="wake-rows"></div>
+      <div class="kv"><span>已唤醒 <b id="m-wakes">0</b> 次</span><span>解释器 <b id="m-engine">规则模拟</b></span><span id="m-skip"></span></div>
+      <p class="note">快环从不等它：LLM 超时或关闭时，内核、声音和图像照常运行，只是不再发育。</p>
+    </article>
+    <article class="panel" id="p-report">
+      <h2>内感受报告 <small id="report-at">还没有唤醒</small></h2>
+      <pre id="report">内核唤醒 LLM 时，这里显示它读到的那份关于自己身体的报告。</pre>
+    </article>
+    <article class="panel" id="p-tools">
+      <h2>工具调用 <small>限制写在代码里强制执行</small></h2>
+      <ol id="tools" class="log"></ol>
+      <p class="note" id="mind-text"></p>
+    </article>
+    <article class="panel" id="p-memory">
+      <h2>记忆流 <small>跨展期保存</small></h2>
+      <ol id="memory" class="log small"></ol>
+    </article>
+  </section>
+
+  <section class="col">
+    <article class="panel" id="p-image">
+      <h2><i>⑤</i>图像 · 慢 <small id="img-params"></small></h2>
+      <div class="stage"><canvas id="body-cv"></canvas><canvas id="map-cv"></canvas><div class="fail" id="img-fail" hidden></div></div>
+      <p class="note">展厅的俯视自身地图：观众以扰动出现在真实位置，节点发声时泛起涟漪。画面不跟手走。</p>
+    </article>
+    <article class="panel" id="p-lexicon">
+      <h2>语义词库 · 中 <small id="lex-count">0 个词</small></h2>
+      <div id="cloud" class="cloud"></div>
+      <h3>意义轨迹 <small>话语原文，不念出来</small></h3>
+      <ol id="trajectory" class="log small"></ol>
+    </article>
+    <article class="panel" id="p-sound">
+      <h2>声音 · 快 <small><span id="snd-state">自语</span> · <span id="snd-ens">相位偏移</span></small></h2>
+      <div id="sm-sound"></div>
+      <canvas id="phys-cv"></canvas>
+      <ol id="notes" class="log osc small"></ol>
+    </article>
+  </section>
+</main>
+
+<div id="expo-hud"></div>
+
+<div id="caption" hidden>
+  <span class="n" id="cap-n">1 / 12</span>
+  <p id="cap-text"></p>
+  <button id="cap-stop" type="button">停止演示</button>
+</div>
+
+<div id="start">
+  <div class="card">
+    <h1>TONOS</h1>
+    <p class="lead">以展厅为身体的人工生命 · 全流程浏览器 demo</p>
+    <p>电脑摄像头代替摄像头节点，电脑扬声器代替 4 个发声节点。观众只是扰动：骨骼被压成扰动数值，推动一个始终在自我稳定的内核；内核压力大时才唤醒 LLM，让它解释自己经历了什么，并通过受限的工具慢慢调节。</p>
+    <div class="flow">
+      <div><b>① 采集</b>骨骼 + 追踪 ID</div>
+      <div><b>② 转换</b>7 维扰动向量</div>
+      <div><b>③ 内核</b>6 个变量 + 状态机</div>
+      <div><b>④ 认知</b>LLM 慢循环</div>
+      <div><b>⑤ 表达</b>声音 · 词库 · 图像</div>
+    </div>
+    <div class="actions">
+      <button id="go-demo" type="button" class="primary">自动演示（约 3 分钟）</button>
+      <button id="go-cam" type="button">开摄像头，自己试</button>
+      <button id="go-sim" type="button">只用模拟观众</button>
+    </div>
+    <p class="fine">画面只在你的浏览器里识别，不上传、不保存。点任一按钮后才会出声。第一次开摄像头要加载约 17 MB 的识别模型。</p>
+    <p class="fine err" id="start-err"></p>
+  </div>
+</div>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
