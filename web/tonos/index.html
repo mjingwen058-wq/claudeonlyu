@@ -352,6 +352,25 @@ pre#report {
 .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--flow); border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ———— 收藏柜 ———— */
+.cab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.spec { text-align: left; display: flex; flex-direction: column; gap: 6px; padding: 0 0 10px; background: var(--raise); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; white-space: normal; }
+.spec[aria-pressed="true"] { border-color: var(--flow); }
+.spec img, .spec .noimg { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; display: block; background: #08090a; }
+.spec .noimg { display: grid; place-items: center; color: var(--faint); font-size: 11px; }
+.spec b { padding: 0 10px; font-size: 13px; }
+.spec .meta { padding: 0 10px; color: var(--dim); font: 11px var(--font-data); }
+.spec .ws { padding: 0 10px; color: var(--ink); font-size: 12px; }
+.spec .last { padding: 0 10px; color: var(--faint); font-size: 11.5px; }
+.cab-empty { color: var(--dim); padding: 30px 0; max-width: 56ch; }
+.detail-img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border: 1px solid var(--line); border-radius: 3px; display: block; background: #08090a; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; margin: 8px 0; }
+.chips span { color: var(--ink); }
+button.hold { position: relative; overflow: hidden; width: 100%; border-color: var(--bad); color: var(--bad); background: transparent; }
+button.hold::before { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--p, 0) * 100%); background: rgba(255,128,110,.25); }
+button.hold.revive { border-color: var(--flow); color: var(--flow); }
+button.hold.revive::before { background: rgba(141,180,255,.25); }
+
 /* ———— 沉浸投影 ———— */
 #immersive { position: fixed; inset: 0; z-index: 60; background: #000; }
 #immersive [data-slot="image"] { position: absolute; inset: 0; }
@@ -414,11 +433,12 @@ pre#report {
 
 <header id="top">
   <div class="brand"><b>TONOS</b></div>
-  <div class="clockbox"><span id="clock">D1 10:00</span><span id="mode-chip" class="chip" style="color: var(--m-rest)">静息</span></div>
+  <div class="clockbox"><span id="clock">D1 10:00</span><span id="mode-chip" class="chip" style="color: var(--m-rest)">静息</span><span id="life-badge" class="chip" style="color: var(--dim)">连接中…</span></div>
   <nav class="tabs" role="tablist" aria-label="视图">
     <button type="button" role="tab" data-view="hall" aria-selected="true">展厅<kbd>1</kbd></button>
     <button type="button" role="tab" data-view="think" aria-selected="false">思考<kbd>2</kbd></button>
     <button type="button" role="tab" data-view="flow" aria-selected="false">全流程<kbd>3</kbd></button>
+    <button type="button" role="tab" data-view="cabinet" aria-selected="false">收藏柜<kbd>4</kbd></button>
   </nav>
   <div class="acts">
     <button id="btn-cam" type="button">开摄像头</button>
@@ -442,7 +462,7 @@ pre#report {
   <section>
     <h3>时间</h3>
     <div class="row"><button id="btn-speed" type="button">演示加速 60×</button><button id="btn-close" type="button">闭馆 → 下一天</button></div>
-    <p class="note">加速时真实 1 秒 = 展期 1 分钟，按小时、按天变化的变量才看得出来。闭馆会把沉积、设定点、词库和记忆存到浏览器里。</p>
+    <p class="note">平时它的一天就是真实的一天（北京时间），每天自动闭馆。演示加速和手动闭馆都在沙盒里进行：真实 1 秒 = 展期 1 分钟，不计入它的生命。</p>
   </section>
   <section>
     <h3>认知</h3>
@@ -462,13 +482,19 @@ pre#report {
     <div class="row"><label for="vol">音量</label><input id="vol" type="range" min="0" max="1" step="0.01" value="0.7"></div>
   </section>
   <section>
-    <h3>存档</h3>
-    <div class="row"><button id="btn-reset" type="button">重置展期</button></div>
-    <p class="note">清掉浏览器里存的展期，从 D1 重新开始。</p>
+    <h3>生命</h3>
+    <p class="note" id="life-info">正在连接…</p>
+    <div id="admin-row" hidden>
+      <label for="admin-key">管理口令（结束或唤回生命时需要）</label>
+      <input id="admin-key" type="password" autocomplete="off" placeholder="只在这个标签页里暂存">
+    </div>
+    <button type="button" class="hold" data-act="end">长按 3 秒：结束这一生</button>
+    <p class="note">结束不是抹除：它连同最后的样子被收进收藏柜，以后可以唤回；然后诞生一个新的生命。</p>
+    <div class="row"><button type="button" class="link" data-goto="cabinet">打开收藏柜 →</button></div>
   </section>
   <section>
     <h3>快捷键</h3>
-    <p class="note">1 展厅 · 2 思考 · 3 全流程 · F 沉浸投影 · Esc 退出沉浸或停止演示</p>
+    <p class="note">1 展厅 · 2 思考 · 3 全流程 · 4 收藏柜 · F 沉浸投影 · Esc 退出沉浸或停止演示</p>
   </section>
 </aside>
 
@@ -495,6 +521,26 @@ pre#report {
       <aside class="rail small">
         <article class="card"><h2><i>①</i>摄像头</h2><div data-slot="cam"></div></article>
         <article class="card"><h2><i>③④</i>大脑与词汇</h2><div data-slot="brain"></div><div data-slot="cloud" style="margin-top:10px"></div></article>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 视图四：收藏柜 -->
+  <section class="view" id="v-cabinet" data-view="cabinet" hidden>
+    <div class="split">
+      <article class="card" id="cab-main">
+        <h2>收藏柜 <small id="cab-count"></small></h2>
+        <p class="lead">每个结束的生命都收在这里：最后一刻的样子、学会的词、记忆、活了多少天。结束不是抹除，收进来的生命可以被唤回。</p>
+        <div id="cab-grid" class="cab-grid"></div>
+      </article>
+      <aside class="rail">
+        <article class="card" id="cab-now">
+          <h2>现在活着的 <small id="cab-now-title"></small></h2>
+          <div id="cab-now-body"></div>
+          <button type="button" class="hold" data-act="end" style="margin-top:10px">长按 3 秒：结束这一生</button>
+          <p class="note" id="cab-admin-note"></p>
+        </article>
+        <article class="card" id="cab-detail"><div id="cab-detail-body"><p class="dim">点左边的一件标本看详情。</p></div></article>
       </aside>
     </div>
   </section>

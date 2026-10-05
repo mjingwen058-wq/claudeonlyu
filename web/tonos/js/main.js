@@ -11,11 +11,11 @@ import { Sound } from './sound.js';
 import { Body, Nerves, drawMap } from './image.js';
 import { UI, MODE_VAR } from './ui.js';
 import { Demo } from './demo.js';
+import { Life } from './life.js';
 import { safeStorage } from './util.js';
 
 const $ = (id) => document.getElementById(id);
 const store = safeStorage();
-const SAVE_KEY = 'tonos.v1';
 const KEY_KEY = 'tonos.apikey';
 const MODEL_KEY = 'tonos.model';
 
@@ -45,43 +45,23 @@ app.log = (text, col) => {
 
 app.setSpeed = (x) => {
   app.clock.speed = x;
+  if (x > 1) app.clock.realtime = false;
   $('btn-speed').classList.toggle('on', x > 1);
   $('btn-speed').textContent = x > 1 ? '演示加速 60× · 开' : '演示加速 60×';
 };
 
-function save() {
+function loadPrefs() {
   if (!store) return;
   try {
-    store.setItem(SAVE_KEY, JSON.stringify({
-      day: app.clock.day,
-      kernel: app.kernel.toJSON(),
-      lexicon: app.lexicon.toJSON(),
-      memory: app.memory.toJSON(),
-    }));
-  } catch { /* 存不了就算了，页面照常运行 */ }
-}
-
-function load() {
-  if (!store) return;
-  try {
-    const s = JSON.parse(store.getItem(SAVE_KEY) || 'null');
-    if (s) {
-      app.clock.day = s.day || 1;
-      app.kernel.load(s.kernel);
-      app.lexicon.load(s.lexicon);
-      app.memory.load(s.memory);
-      app.sound.selfPool = app.lexicon.top(4).map((w) => w.word);
-      app.log(`载入展期存档：D${app.clock.day} 开馆，沉积 ${app.kernel.v.sediment.toFixed(2)}，词库 ${app.lexicon.words.size} 个词`, 'var(--flow)');
-    }
     const key = store.getItem(KEY_KEY);
     if (key) { app.mind.apiKey = key; $('api-key').value = key; }
     const model = store.getItem(MODEL_KEY);
     if (model) { app.mind.model = model; }
-  } catch { /* 存档损坏时从头开始 */ }
+  } catch { /* 忽略 */ }
 }
 
-// 闭馆：沉积 → 基调漂移，词条衰减，记忆压缩，存盘，第二天开馆
-app.closeDay = () => {
+// 演示里的闭馆：只改这个页面，不写进它的生命
+function sandboxClose() {
   const day = app.clock.day;
   const drift = app.kernel.closeDay();
   const gone = app.lexicon.decayDay();
@@ -90,19 +70,50 @@ app.closeDay = () => {
   app.sound.newDay();
   const f = (x) => `${x >= 0 ? '+' : ''}${x.toFixed(3)}`;
   app.log(
-    `闭馆 D${day}：沉积 ${app.kernel.v.sediment.toFixed(2)}；设定点漂移 唤醒 ${f(drift.arousal)} · 边界 ${f(drift.boundary)} · 充盈 ${f(drift.fullness)}；词条按天衰减${gone.length ? `（${gone.join('、')} 淡出）` : ''}；记忆压成摘要，遗忘 ${forgotten} 条；已存盘`,
+    `闭馆 D${day}（演示）：沉积 ${app.kernel.v.sediment.toFixed(2)}；设定点漂移 唤醒 ${f(drift.arousal)} · 边界 ${f(drift.boundary)} · 充盈 ${f(drift.fullness)}；词条按天衰减${gone.length ? `（${gone.join('、')} 淡出）` : ''}；记忆压成摘要，遗忘 ${forgotten} 条`,
     'var(--flow)',
   );
   app.clock.nextDay();
   app.mind.version++;
-  save();
-  app.log(`D${app.clock.day} 开馆`, 'var(--flow)');
+  app.log(`D${app.clock.day} 开馆（演示）`, 'var(--flow)');
+}
+
+// 闭馆：演示里在沙盒中做；本地模式可以手动闭馆；共享生命按北京时间自动闭馆
+app.closeDay = async () => {
+  const L = app.life;
+  if (L.sandbox || L.mode === 'pending') { sandboxClose(); return; }
+  const r = await L.closeDay();
+  if (r === 'shared') app.log('共享生命按北京时间自动闭馆。手动闭馆只在演示里可用（先开演示加速）', 'var(--warn)');
+  else { app.features.newDay(); app.sound.newDay(); }
 };
 
 app.demo = new Demo(app);
 app.ui = new UI(app);
-load();
+app.life = new Life(app);
+app.mind.onEffect = (name, input, result) => app.life.fromTool(name, input, result);
+app.mind.proxy = () => app.life.shared && app.life.info.llm && !app.life.sandbox;
+loadPrefs();
 $('model').value = app.mind.model;
+app.life.init().catch((e) => app.log(`生命没有接上：${e.message}`, 'var(--bad)'));
+
+// 结束或唤回时，截下它最后一刻的样子（必须在渲染之后的同一帧里读画布）
+app.thumbWaiters = [];
+app.captureThumb = () => new Promise((resolve) => {
+  app.thumbWaiters.push(resolve);
+  setTimeout(() => resolve(''), 1500);
+});
+function snapshot() {
+  const c = document.createElement('canvas');
+  c.width = 480;
+  c.height = 300;
+  const g = c.getContext('2d');
+  g.fillStyle = '#0a0b0d';
+  g.fillRect(0, 0, c.width, c.height);
+  if (app.body.ok) g.drawImage($('body-cv'), 0, 0, c.width, c.height);
+  const n = $('nerve-cv');
+  if (n.width && n.clientWidth) g.drawImage(n, 0, 0, c.width, c.height);
+  try { return c.toDataURL('image/jpeg', 0.82); } catch { return ''; }
+}
 
 if (!app.body.ok) {
   $('img-fail').hidden = false;
@@ -139,6 +150,7 @@ function onKernelEvent(e) {
 
 function onMindEvent(e) {
   if (e.type === 'wake') app.log(`唤醒 LLM：${e.report.wake_reason}`, 'var(--flow)');
+  else if (e.type === 'done') app.life.episode(app.mind.episodes[0]);
   else if (e.type === 'utter') app.sound.utter(e.words, app.lexicon, app.features.count > 0);
 }
 
@@ -179,6 +191,11 @@ function frame(ts) {
     });
     a.nerves.update(dt, a.features.list);
     a.nerves.draw(a.body.lag.boundary);
+    if (a.thumbWaiters.length) {
+      const url = snapshot();
+      for (const r of a.thumbWaiters.splice(0)) r(url);
+    }
+    a.life.tick(dt, dtEx);
     drawMap($('map-cv'), a.features.list, ripples, { labels: !a.ui.immersive });
 
     a.ui.frame(dt);
@@ -322,24 +339,61 @@ $('btn-demo').addEventListener('click', () => {
   else { startAudio(); app.demo.start(); }
 });
 $('cap-stop').addEventListener('click', () => app.demo.stop());
-let resetArmed = 0;
-$('btn-reset').addEventListener('click', () => {
-  const now = performance.now();
-  if (now - resetArmed < 4000) {
-    try { if (store) store.removeItem(SAVE_KEY); } catch { /* 忽略 */ }
-    location.reload();
-    return;
+// 长按 3 秒才生效：结束这一生 / 唤回
+const HOLD_MS = 3000;
+function bindHold(btn) {
+  let t0 = 0, raf = 0;
+  const cancel = () => { t0 = 0; cancelAnimationFrame(raf); btn.style.setProperty('--p', 0); };
+  const step = (now) => {
+    if (!t0) return;
+    const p = Math.min(1, (now - t0) / HOLD_MS);
+    btn.style.setProperty('--p', p);
+    if (p >= 1) { cancel(); holdDone(btn); return; }
+    raf = requestAnimationFrame(step);
+  };
+  const begin = () => { t0 = performance.now(); raf = requestAnimationFrame(step); };
+  btn.addEventListener('pointerdown', (e) => {
+    if (btn.disabled) return;
+    e.preventDefault();
+    begin();
+  });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) btn.addEventListener(ev, cancel);
+  btn.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && !t0 && !btn.disabled) { e.preventDefault(); begin(); } });
+  btn.addEventListener('keyup', cancel);
+}
+async function holdDone(btn) {
+  const L = app.life;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '正在收进收藏柜…';
+  try {
+    if (L.shared) await L.checkAdmin();
+    const thumb = await app.captureThumb();
+    if (btn.dataset.act === 'revive') {
+      const doc = await L.revive(btn.dataset.id, thumb);
+      app.log(`唤回了 #${doc.n}，它带着原来的词库和记忆继续生长`, 'var(--flow)');
+    } else {
+      const doc = await L.end(thumb);
+      app.log(`上一个生命收进了收藏柜。第 ${doc.n} 个生命诞生`, 'var(--flow)');
+    }
+    app.ui.cabinetDirty = true;
+  } catch (e) {
+    app.log(`没有完成：${e.message}`, 'var(--bad)');
+    app.ui.flash(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
-  resetArmed = now;
-  $('btn-reset').textContent = '再点一次确认重置';
-  setTimeout(() => { $('btn-reset').textContent = '重置展期'; }, 4000);
-});
+}
+app.bindHold = bindHold;
+document.querySelectorAll('button.hold').forEach(bindHold);
+$('admin-key').addEventListener('input', (e) => app.life.setAdminKey(e.target.value.trim()));
 
-// 快捷键：1 展厅 · 2 思考 · 3 全流程 · F 沉浸投影 · Esc 退出
+// 快捷键：1 展厅 · 2 思考 · 3 全流程 · 4 收藏柜 · F 沉浸投影 · Esc 退出
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea')) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  const views = { 1: 'hall', 2: 'think', 3: 'flow' };
+  const views = { 1: 'hall', 2: 'think', 3: 'flow', 4: 'cabinet' };
   if (views[e.key]) { app.ui.setImmersive(false); app.ui.setView(views[e.key]); }
   if (e.key === 'f' || e.key === 'F') app.ui.setImmersive(!app.ui.immersive);
   if (e.key === 'Escape') {

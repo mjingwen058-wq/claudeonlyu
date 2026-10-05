@@ -40,7 +40,13 @@ export class Demo {
   }
 
   stop() {
+    const wasOn = this.on;
     this.on = false;
+    if (wasOn) {
+      // 演示结束：关掉加速、送走模拟观众，页面回到它真实的生命
+      this.app.setSpeed(1);
+      if (this.app.crowd.count) this.app.crowd.scenario('clear');
+    }
     document.getElementById('caption').hidden = true;
     if (this.spot) this.spot.classList.remove('spot');
     this.spot = null;

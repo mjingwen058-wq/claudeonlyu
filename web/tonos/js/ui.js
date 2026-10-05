@@ -138,7 +138,7 @@ const SM_SOUND = `<svg class="sm" viewBox="0 0 360 172" role="img" aria-label="�
 </svg>`;
 
 const TOOL_ZH = { update_lexicon: '更新词库', utter: '开口', adjust_setpoint: '调设定点', set_mode_bias: '调模式权重', write_memory: '写记忆', '—': '调用失败' };
-const VIEWS = ['hall', 'think', 'flow'];
+const VIEWS = ['hall', 'think', 'flow', 'cabinet'];
 const UI_KEY = 'tonos.ui';
 const uiStore = () => { try { return window.localStorage; } catch { return null; } };
 const sign = (x) => `${x > 0 ? '+' : ''}${Number(x).toFixed(2)}`;
@@ -193,6 +193,11 @@ export class UI {
     this.immersive = false;
     this.epSel = null;
     this.openKeys = new Set();
+    this.cabItems = [];
+    this.cabSel = null;
+    this.cabAt = 0;
+    this.cabinetDirty = true;
+    this.specCache = new Map();
     this.widgets = new Map([...document.querySelectorAll('[data-widget]')].map((el) => [el.dataset.widget, el]));
     this.build();
     this.restore();
@@ -318,6 +323,13 @@ export class UI {
       this.syncToggles();
       this.v = {};
     }));
+    $('cab-grid').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-spec]');
+      if (!b) return;
+      this.cabSel = b.dataset.spec;
+      this.renderCabinet();
+      this.renderDetail();
+    });
     $('btn-immerse').addEventListener('click', () => this.setImmersive(true));
     $('btn-exit-immerse').addEventListener('click', () => this.setImmersive(false));
   }
@@ -603,7 +615,8 @@ export class UI {
     const modeName = MODES[k.mode].name;
     const modeCol = `var(${MODE_VAR[k.mode]})`;
     const mindText = !m.enabled ? '认知层关闭' : m.busy ? '思考中…' : `休眠中${m.cooldown > 0 ? ` · 冷却 ${Math.ceil(m.cooldown)}s` : ''}`;
-    $('clock').textContent = a.clock.label();
+    $('clock').textContent = a.clock.realtime ? `第 ${a.clock.day} 天 · ${a.clock.label().slice(-5)}` : a.clock.label();
+    this.lifeStatus();
     const chip = $('mode-chip');
     chip.textContent = modeName;
     chip.style.color = modeCol;
@@ -701,7 +714,7 @@ export class UI {
       r.val.textContent = `${Math.round(cv * 100)}%`;
       r.row.classList.toggle('fire', cv >= 1 || (m.busy && m.lastReason === w.key));
     }
-    const engineLabel = m.engine === 'claude' && m.apiKey ? (MODELS.find((x) => x.id === m.model)?.label || m.model) : '规则模拟';
+    const engineLabel = m.proxy?.() ? 'Claude（服务器）' : m.engine === 'claude' && m.apiKey ? (MODELS.find((x) => x.id === m.model)?.label || m.model) : '规则模拟';
     $('m-wakes').textContent = m.wakes;
     $('m-engine').textContent = engineLabel;
     $('m-skip').textContent = m.skipped ? `关闭期间跳过 ${m.skipped} 次` : '';
@@ -728,6 +741,13 @@ export class UI {
     $('ms-status').textContent = mindText;
     $('b-mind').textContent = mindText;
     if (this.view === 'think') this.renderThink(engineLabel);
+    if (this.view === 'cabinet') {
+      if (this.cabinetDirty || !this.cabAt || performance.now() - this.cabAt > 30000) {
+        this.cabinetDirty = false;
+        this.loadCabinet();
+      }
+      this.renderNow();
+    }
 
     // 大脑与词汇
     $('b-mode').textContent = modeName;
@@ -777,6 +797,142 @@ export class UI {
     $('pipe-4').textContent = !m.enabled ? '认知层关闭' : m.busy ? '思考中…' : `休眠 · 已唤醒 ${m.wakes} 次`;
     $('pipe-5').textContent = `${SOUND_STATES[s.state]} · ${ENSEMBLES[s.ensemble]} · ${a.lexicon.words.size} 词`;
     $('expo-hud').textContent = `${a.clock.label()} · ${modeName} · ${F.count} 人 · 声音 ${SOUND_STATES[s.state]}`;
+  }
+
+  // ———— 生命状态 ————
+  lifeStatus() {
+    const L = this.app.life;
+    if (!L) return;
+    const badge = $('life-badge');
+    let text, col;
+    if (L.mode === 'pending') { text = '连接中…'; col = 'var(--dim)'; }
+    else if (L.sandbox) { text = '演示中 · 不计入它的生命'; col = 'var(--warn)'; }
+    else { text = `${L.shared ? '共享生命' : '本地生命'} #${L.doc?.n ?? '?'} · 第 ${L.doc?.day ?? 1} 天`; col = L.shared ? 'var(--ok)' : 'var(--dim)'; }
+    badge.textContent = text;
+    badge.style.color = col;
+    badge.title = `存储：${L.info.store || '—'}${L.error ? ` · 同步失败：${L.error}` : ''}`;
+    if (!$('drawer').hidden || this.view === 'cabinet') {
+      const ago = L.lastSync ? ` · ${Math.round((Date.now() - L.lastSync) / 1000)} 秒前同步` : '';
+      const memWarn = L.info.store === 'memory' ? ' · 服务器还没接存储，重启后会丢失' : '';
+      $('life-info').textContent = L.doc
+        ? `${L.title()} · 已活 ${L.doc.day} 天 · 存在${L.shared ? `服务器（${L.info.store}）` : L.info.store}${L.shared ? ago : ''}${memWarn}${L.sandbox ? ' · 现在是演示，不计入' : ''}${L.error ? ` · 同步失败：${L.error}` : ''}`
+        : '正在连接…';
+      $('admin-row').hidden = !L.shared;
+      const block = L.shared && !L.info.admin ? '服务器还没有设置管理口令（TONOS_ADMIN_KEY），暂时不能结束或唤回。'
+        : L.shared && !L.adminKey ? '结束或唤回需要管理口令：在 ⚙ 控制 → 生命里填。'
+        : '';
+      $('cab-admin-note').textContent = block || (L.shared ? '口令已填，只在这个标签页里暂存。' : '本地模式：只影响这台电脑上的生命。');
+      document.querySelectorAll('button.hold').forEach((b) => { if (!b.textContent.startsWith('正在')) b.disabled = !!block || L.mode === 'pending'; });
+    }
+  }
+
+  async loadCabinet() {
+    if (this.cabLoading) return;
+    this.cabLoading = true;
+    try {
+      this.cabItems = await this.app.life.items();
+      this.cabErr = '';
+    } catch (e) {
+      this.cabErr = e.message;
+    } finally {
+      this.cabLoading = false;
+      this.cabAt = performance.now();
+    }
+    this.renderCabinet();
+    for (const it of this.cabItems.slice(0, 24)) if (it.thumb && !this.specCache.has(it.id)) this.fetchSpecimen(it.id);
+    this.renderDetail();
+  }
+
+  async fetchSpecimen(id) {
+    try {
+      const sp = await this.app.life.specimen(id);
+      if (!sp) return null;
+      this.specCache.set(id, sp);
+      const img = document.querySelector(`[data-spec="${CSS.escape(id)}"] img`);
+      if (img && sp.thumb) img.src = sp.thumb;
+      if (this.cabSel === id) this.renderDetail();
+      return sp;
+    } catch {
+      return null;
+    }
+  }
+
+  renderCabinet() {
+    const items = this.cabItems;
+    $('cab-count').textContent = `${items.length} 件`;
+    if (this.cabErr) {
+      $('cab-grid').innerHTML = `<p class="cab-empty">柜子打不开：${esc(this.cabErr)}</p>`;
+      return;
+    }
+    if (!items.length) {
+      $('cab-grid').innerHTML = '<p class="cab-empty">柜子还是空的。结束一个生命后，它会连同最后一刻的样子被收在这里，以后可以唤回。</p>';
+      return;
+    }
+    const day = (iso) => iso ? iso.slice(5, 10).replace('-', '.') : '';
+    $('cab-grid').innerHTML = items.map((e) => {
+      const sp = this.specCache.get(e.id);
+      const img = sp?.thumb ? `<img alt="" src="${sp.thumb}">` : e.thumb ? '<img alt="">' : '<span class="noimg">没有留下图像</span>';
+      return `<button type="button" class="spec" data-spec="${esc(e.id)}" aria-pressed="${this.cabSel === e.id}">${img}
+        <b>${esc(e.title)}</b><span class="meta">活了 ${e.days} 天 · ${day(e.ended)} 收进来 · 沉积 ${e.sediment}</span>
+        <span class="ws">${esc(e.words.slice(0, 6).join('、') || '没有学会的词')}</span>
+        ${e.lastUtter ? `<span class="last">「${esc(e.lastUtter)}」</span>` : ''}</button>`;
+    }).join('');
+  }
+
+  async renderDetail() {
+    const box = $('cab-detail-body');
+    const e = this.cabItems.find((x) => x.id === this.cabSel);
+    if (!e) { box.innerHTML = '<p class="dim">点左边的一件标本看详情。</p>'; return; }
+    const sp = this.specCache.get(e.id) || await this.fetchSpecimen(e.id);
+    if (!sp || this.cabSel !== e.id) return;
+    const d = sp.doc;
+    const words = [...(d.lexicon.words || [])].sort((a, b) => b.weight - a.weight);
+    const mems = [...(d.memory || [])].sort((a, b) => (b.kind === 'summary') - (a.kind === 'summary') || b.importance - a.importance).slice(0, 12);
+    const fmtDay = (iso) => iso ? `${iso.slice(0, 10)}` : '';
+    box.innerHTML = `${sp.thumb ? `<img class="detail-img" alt="${esc(e.title)}最后的样子" src="${sp.thumb}">` : ''}
+      <h3 class="sub" style="margin-top:10px">${esc(e.title)}</h3>
+      <dl class="facts"><dt>出生</dt><dd>${fmtDay(d.born)}</dd><dt>收进柜子</dt><dd>${fmtDay(sp.ended)}</dd>
+        <dt>活了</dt><dd>${d.day} 天</dd><dt>沉积</dt><dd>${Number(d.kernel.sediment).toFixed(2)}</dd>
+        <dt>思考</dt><dd>${d.stats?.wakes || 0} 次</dd></dl>
+      <h3 class="sub">学会的词 <small>${words.length} 个</small></h3>
+      <div class="chips">${words.slice(0, 30).map((w) => `<span style="font-size:${(11 + 14 * w.weight).toFixed(1)}px;opacity:${(0.45 + 0.55 * w.weight).toFixed(2)}">${esc(w.word)}</span>`).join('') || '<span class="dim">没有</span>'}</div>
+      <h3 class="sub">最后的话</h3>
+      <p class="utter${e.lastUtter ? '' : ' empty'}">${e.lastUtter ? `「${esc(e.lastUtter)}」` : '它没有说过话'}</p>
+      <h3 class="sub">记忆 <small>${(d.memory || []).length} 条</small></h3>
+      <ol class="log small">${mems.map((m) => `<li><span class="imp">${m.importance}</span>${esc(m.text)}</li>`).join('') || '<li>没有</li>'}</ol>
+      <button type="button" class="hold revive" data-act="revive" data-id="${esc(e.id)}" style="margin-top:12px">长按 3 秒：唤回它</button>
+      <p class="note">唤回后，现在活着的那个会先被收进柜子；它带着原来的词库、记忆、沉积和设定点继续生长。</p>`;
+    const btn = box.querySelector('button.hold');
+    if (btn && this.app.bindHold) this.app.bindHold(btn);
+    this.lifeStatus();
+  }
+
+  renderNow() {
+    const L = this.app.life;
+    const d = L?.doc;
+    if (!d) return;
+    $('cab-now-title').textContent = L.title();
+    const key = `${d.rev}|${d.n}|${L.sandbox}`;
+    if (this.v.now === key) return;
+    this.v.now = key;
+    $('cab-now-body').innerHTML = `<dl class="facts"><dt>出生</dt><dd>${d.born.slice(0, 10)}</dd><dt>已活</dt><dd>${d.day} 天</dd>
+      <dt>沉积</dt><dd>${Number(d.kernel.sediment).toFixed(2)}</dd><dt>词库</dt><dd>${d.lexicon.words.length} 个词</dd>
+      <dt>记忆</dt><dd>${d.memory.length} 条</dd><dt>思考</dt><dd>${d.stats?.wakes || 0} 次</dd></dl>`;
+  }
+
+  flash(msg) {
+    let t = $('toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'toast';
+      t.setAttribute('role', 'status');
+      t.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:80;max-width:min(420px,calc(100% - 32px));background:var(--panel);border:1px solid var(--bad);color:var(--ink);padding:10px 14px;border-radius:4px;box-shadow:0 10px 30px rgba(0,0,0,.5)';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(this.toastT);
+    this.toastT = setTimeout(() => { t.hidden = true; }, 5000);
   }
 
   selectedEpisode() {

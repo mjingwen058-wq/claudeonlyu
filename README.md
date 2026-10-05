@@ -10,16 +10,32 @@
 | ④ 认知 | 4 个唤醒条件；内感受报告；5 个工具的限制写在代码里强制执行。默认是规则模拟解释器，填自己的 Anthropic API Key 可换成真实 Claude |
 | ⑤ 表达 | 声音：物理世界里碰撞发声 + 声音状态机 + 5 种合奏；词库：语义坐标排布，大小 = 权重；图像：WebGL2 反应-扩散表现自身状态，线条层表现观众的神经挑动 |
 
-三个视图：**展厅**看它的样子（图像 + 摄像头 + 大脑与词汇），**思考**看 LLM 每次被唤醒后怎么想、调了哪些工具，**全流程**一层一层看数据（表层常显，后台数据点开才展开）。图像分两层：色块是它自己的状态，细线是观众对它的神经挑动。
+四个视图：
+- **展厅**：看它的样子（图像 + 摄像头 + 大脑与词汇）
+- **思考**：看 LLM 每次被唤醒后怎么想、调了哪些工具
+- **全流程**：一层一层看数据，表层常显，后台数据点开才展开
+- **收藏柜**：结束了的生命收在这里，可以唤回
 
-打开后点"自动演示"，约 3 分钟走完全流程；或者点"开摄像头，自己试"。在 ⚙ 控制里点"闭馆 → 下一天"可以看沉积、设定点漂移和记忆压缩，状态存在浏览器本地，刷新后接着上一天。
+图像分两层：色块是它自己的状态，细线是观众对它的神经挑动。
+
+打开后点"自动演示"，约 3 分钟走完全流程；或者点"开摄像头，自己试"。
+
+**它是一个持续生长的生命**：
+- 部署到 Vercel 后，所有打开的页面共享同一个生命，它的一天就是真实的一天（北京时间）
+- 自动演示和模拟观众在沙盒里跑，不计入它的生命
+- 结束一个生命要管理口令，结束后收进收藏柜，以后可以唤回
+- 没有服务器时（本地或 githack）存在浏览器本地
 
 交接记录（进度、设计决定、反馈、待办）：[`docs/TONOS-进度记录.md`](docs/TONOS-进度记录.md)
 
-- 在线入口（不用设置，可以用摄像头）：`https://rawcdn.githack.com/mjingwen058-wq/claudeonlyu/<提交号>/web/tonos/index.html`
-- GitHub Pages 打开以后：<https://mjingwen058-wq.github.io/claudeonlyu/tonos/>
-- 本地：`cd web && python3 -m http.server 8000`，再用 Chrome 打开 <http://localhost:8000/tonos/>
-- 测试：`node --test tests/tonos-kernel.test.mjs`；`node tests/tonos-sim-run.mjs` 打印模拟观众经过每一层的数值
+- **部署**：Vercel 项目，根目录 `web/tonos`；需要连接一个存储（Upstash Redis 或 Vercel Blob），并设置 `TONOS_ADMIN_KEY`。步骤和全部环境变量见交接记录的「上线到 Vercel」
+- **临时入口**（本地模式，可以用摄像头）：`https://rawcdn.githack.com/mjingwen058-wq/claudeonlyu/<提交号>/web/tonos/index.html`
+- **本地运行**：
+  - 本地模式：`cd web && python3 -m http.server 8000`，再用 Chrome 打开 <http://localhost:8000/tonos/>
+  - 共享模式（仿真 Vercel，内存存储）：`TONOS_ADMIN_KEY=test node tests/tonos-dev-server.mjs`，再打开 <http://localhost:8790/>
+- **测试**：
+  - `node --test tests/tonos-kernel.test.mjs tests/tonos-life.test.mjs`
+  - `node tests/tonos-sim-run.mjs` 打印模拟观众经过每一层的数值
 
 ---
 

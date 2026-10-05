@@ -148,6 +148,19 @@ export class Lexicon {
     this.version++;
   }
 
+  // 用服务器上的词库整体替换（保留正在亮着的词）
+  replaceAll(o) {
+    const old = this.words;
+    this.words = new Map();
+    for (const w of o?.words || []) {
+      this.add(w, w.weight, w.born);
+      const prev = old.get(w.word);
+      if (prev) this.words.get(w.word).lit = prev.lit;
+    }
+    this.trajectory = (o?.trajectory || []).slice(0, 30);
+    this.version++;
+  }
+
   toJSON() {
     return {
       words: [...this.words.values()].map(({ word, valence, category, x, y, weight, born }) => ({ word, valence, category, x, y, weight, born })),

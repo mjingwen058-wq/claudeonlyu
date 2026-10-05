@@ -199,6 +199,9 @@ export class Mind {
     this.toolLog = [];
     this.episodes = []; // 每次唤醒一条：给「思考」视图按步骤展开
     this.episode = null;
+    this.via = 'sim'; // sim = 规则模拟，direct = 浏览器直连 Claude，proxy = 服务器替大家调用
+    this.proxy = null; // 返回 true 时走服务器接口 /api/mind
+    this.onEffect = null; // 工具生效后通知共享生命
     this.utterReadyAt = 0;
     this.utterCooldown = 30;
     this.events = [];
@@ -287,6 +290,7 @@ export class Mind {
     this.lastReason = reason;
     const report = this.buildReport(reason);
     this.lastReport = report;
+    this.via = this.proxy?.() ? 'proxy' : this.engine === 'claude' && this.apiKey ? 'direct' : 'sim';
     this.episode = {
       n: this.wakes,
       at: this.clock.label(),
@@ -296,7 +300,7 @@ export class Mind {
       report,
       calls: [],
       text: '',
-      by: this.engine === 'claude' && this.apiKey ? 'Claude' : '规则模拟',
+      by: this.byLabel(),
       done: false,
     };
     this.episodes.unshift(this.episode);
@@ -305,13 +309,15 @@ export class Mind {
     this.events.push({ type: 'wake', reason, report });
     this.version++;
     try {
-      if (this.engine === 'claude' && this.apiKey) {
+      if (this.via !== 'sim') {
         await this.runClaude(report);
       } else {
         await this.runSim(report, reason);
       }
     } catch (e) {
       this.log({ name: '—', input: {}, status: 'rejected', note: `Claude 调用失败：${e.message}。这次改用模拟解释器，快环不受影响` });
+      this.via = 'sim';
+      if (this.episode) this.episode.by = '规则模拟（Claude 失败后）';
       try { await this.runSim(report, reason); } catch { /* 模拟器不会失败 */ }
     } finally {
       this.busy = false;
@@ -327,8 +333,12 @@ export class Mind {
     }
   }
 
+  byLabel() {
+    return this.via === 'proxy' ? 'Claude（服务器）' : this.via === 'direct' ? 'Claude' : '规则模拟';
+  }
+
   log(entry) {
-    const e = { at: this.clock.label(), by: this.engine === 'claude' && this.apiKey ? 'Claude' : '模拟', ...entry };
+    const e = { at: this.clock.label(), by: this.byLabel(), ...entry };
     this.toolLog.unshift(e);
     if (this.busy && this.episode) this.episode.calls.push(e);
     this.toolLog.length = Math.min(this.toolLog.length, 40);
@@ -432,6 +442,7 @@ export class Mind {
         notes.push('没有这个工具');
     }
     const note = notes.join('；');
+    if (status !== 'rejected' && this.onEffect) this.onEffect(name, input, result);
     this.log({ name, input, status, note, result });
     return { status, note, result };
   }
@@ -509,6 +520,17 @@ export class Mind {
   }
 
   async callApi(messages) {
+    if (this.via === 'proxy') {
+      // 服务器替大家调用：Key 在服务器上，这里不需要
+      const r = await fetch('./api/mind', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ system: SYSTEM_PROMPT, tools: TOOL_DEFS, messages }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      return j;
+    }
     const body = { model: this.model, max_tokens: 1500, system: SYSTEM_PROMPT, tools: TOOL_DEFS, messages };
     const headers = {
       'content-type': 'application/json',

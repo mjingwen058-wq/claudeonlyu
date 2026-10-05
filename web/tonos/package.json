@@ -1,0 +1,10 @@
+{
+  "name": "tonos",
+  "private": true,
+  "type": "module",
+  "description": "TONOS：以展厅为身体的人工生命（浏览器 demo + 共享生命接口）",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@vercel/blob": "^2.8.0"
+  }
+}
