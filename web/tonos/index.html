@@ -6,11 +6,14 @@
 <title>TONOS 全流程 Demo</title>
 <link rel="icon" href="data:,">
 <style>
-/* 布局：顶栏 + 控制条 + 五段流水线 + 四列面板（①② 采集转换 / ③ 内核 / ④ 认知 / ⑤ 表达）；窄屏逐级变成两列、一列。
-   展厅视图：只留图像和词库，按文档 1.5 的高度分层铺满全屏。 */
+/* 布局：顶栏 + 三个视图。
+   展厅 = 大图像 + 侧栏（摄像头、大脑与词汇）；思考 = 思考过程 + 缩小的侧栏；
+   全流程 = 五张流水线卡片选层 + 该层详情（表层在上，后台数据折叠在下）。
+   组件在页面里只有一份，切换视图时挪进对应的槽（data-slot）。 */
 :root {
   --ground: #0d0f11;   /* 页面底色：暗室 */
-  --panel: #13161a;    /* 面板 */
+  --panel: #13161a;    /* 卡片 */
+  --raise: #181c21;    /* 卡片里的分组 */
   --well: #1a1e23;     /* 控件、条形图底 */
   --line: #262b31;     /* 细线 */
   --ink: #e7e3d9;      /* 主文字：骨白 */
@@ -41,105 +44,171 @@ body {
 button, select, input { font: inherit; color: var(--ink); }
 button, select {
   background: var(--well); border: 1px solid var(--line); border-radius: 3px;
-  padding: 4px 9px; cursor: pointer; white-space: nowrap;
+  padding: 4px 10px; cursor: pointer; white-space: nowrap;
 }
 button:hover, select:hover { border-color: var(--dim); }
-button:focus-visible, select:focus-visible, input:focus-visible { outline: 1px solid var(--flow); outline-offset: 2px; }
+button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 1px solid var(--flow); outline-offset: 2px; }
 button.on { background: var(--ink); color: var(--ground); border-color: var(--ink); }
 button.primary { background: var(--flow); color: #0b1220; border-color: var(--flow); font-weight: 600; }
+button.ghost { background: transparent; border-color: transparent; color: var(--dim); padding-inline: 4px; }
+button.ghost:hover { color: var(--ink); border-color: transparent; }
+button.link { background: none; border: 0; padding: 0; color: var(--flow); }
+button.link:hover { text-decoration: underline; }
 button:disabled { opacity: .45; cursor: default; }
-input[type=range] { accent-color: var(--ink); width: 90px; vertical-align: middle; }
+input[type=range] { accent-color: var(--ink); width: 140px; vertical-align: middle; }
 input[type=password], input[type=text] {
-  background: var(--well); border: 1px solid var(--line); border-radius: 3px; padding: 4px 8px; min-width: 0;
+  background: var(--well); border: 1px solid var(--line); border-radius: 3px; padding: 5px 8px; min-width: 0; width: 100%;
 }
 
-/* 顶栏 */
+/* ———— 顶栏 ———— */
 #top {
-  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
-  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  padding-block: 10px 8px; background: var(--ground); border-bottom: 1px solid var(--line);
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30;
+  display: flex; align-items: center; gap: 10px 18px; flex-wrap: wrap;
+  padding-block: 10px; background: var(--ground); border-bottom: 1px solid var(--line);
 }
-.brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex: 1 1 auto; }
+.brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
 .brand b { font: 600 15px/1 var(--font-data); letter-spacing: .38em; }
-.brand span { color: var(--dim); }
 .clockbox { display: flex; align-items: center; gap: 8px; font-family: var(--font-data); }
-#clock { font-size: 15px; font-variant-numeric: tabular-nums; }
+#clock { font-size: 14px; font-variant-numeric: tabular-nums; color: var(--dim); }
 .chip {
-  display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px;
   border: 1px solid currentColor; font-size: 11.5px; line-height: 1.5; white-space: nowrap;
 }
 .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.views { display: flex; gap: 0; }
-.views button { border-radius: 0; }
-.views button:first-child { border-radius: 3px 0 0 3px; }
-.views button:last-child { border-radius: 0 3px 3px 0; border-left: 0; }
-
-/* 控制条 */
-#controls { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-block: 10px; border-bottom: 1px solid var(--line); }
-.grp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.lbl { color: var(--faint); font-size: 11px; letter-spacing: .06em; margin-right: 2px; }
-#claude-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-block: 8px; border-bottom: 1px solid var(--line); color: var(--dim); }
-#claude-row input { width: 300px; max-width: 100%; }
-
-/* 流水线 */
-#pipe { list-style: none; margin: 0; padding: 12px 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-#pipe li {
-  position: relative; padding: 8px 10px; border: 1px solid var(--line); border-radius: 3px;
-  background: linear-gradient(90deg, rgba(141,180,255,var(--act, 0)) 0%, rgba(141,180,255,0) 100%), var(--panel);
-  transition: border-color .2s;
-  min-width: 0;
+.tabs { display: flex; background: var(--well); border: 1px solid var(--line); border-radius: 4px; padding: 2px; margin-inline: auto; }
+.tabs button { border: 0; background: transparent; color: var(--dim); padding: 5px 16px; border-radius: 3px; font-size: 13px; }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--ground); font-weight: 600; }
+.tabs button kbd { font: 10px var(--font-data); opacity: .55; margin-left: 6px; }
+.acts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.menu { position: relative; }
+.pop {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 170px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 6px;
+  display: flex; flex-direction: column; gap: 4px; box-shadow: 0 12px 30px rgba(0,0,0,.5);
 }
-#pipe li.hot { border-color: var(--flow); }
-#pipe li:not(:last-child)::after {
-  content: "→"; position: absolute; right: -10px; top: 50%; transform: translate(50%, -50%);
-  color: var(--faint); font-family: var(--font-data);
-}
-#pipe b { display: block; font-weight: 600; font-size: 12.5px; }
-#pipe b i { font-style: normal; color: var(--flow); margin-right: 4px; }
-#pipe span { display: block; color: var(--dim); font-family: var(--font-data); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pop button { text-align: left; background: transparent; border-color: transparent; }
+.pop button:hover { background: var(--well); }
+.pop .hint { color: var(--faint); font-size: 11px; padding: 2px 8px 4px; }
 
-/* 四列 */
-#grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; }
-.col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 10px 12px 12px; min-width: 0; transition: outline-color .3s, box-shadow .3s; outline: 1px solid transparent; }
-.panel.spot { outline-color: var(--flow); box-shadow: 0 0 0 4px rgba(141,180,255,.14); }
-.panel h2 {
-  margin: 0 0 8px; font-size: 13px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
-  text-wrap: balance;
+/* ———— 控制抽屉 ———— */
+#drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 100%); z-index: 45;
+  background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px calc(env(safe-area-inset-bottom, 0px) + 24px);
+  display: flex; flex-direction: column; gap: 18px; box-shadow: -20px 0 40px rgba(0,0,0,.45);
 }
-.panel h2 i { font-style: normal; color: var(--flow); }
-.panel h2 small, .panel h3 small { margin-left: auto; color: var(--dim); font-weight: 400; font-size: 11px; font-family: var(--font-data); }
-.panel h3 { margin: 12px 0 6px; font-size: 12px; font-weight: 600; color: var(--dim); display: flex; gap: 8px; }
+#drawer > header { display: flex; justify-content: space-between; align-items: center; }
+#drawer > header b { font-size: 14px; }
+#drawer section { display: flex; flex-direction: column; gap: 8px; }
+#drawer h3 { margin: 0; font-size: 11px; font-weight: 500; letter-spacing: .08em; color: var(--faint); border-bottom: 1px solid var(--line); padding-bottom: 5px; }
+#drawer .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+#drawer label { color: var(--dim); font-size: 11.5px; }
+#drawer select { width: 100%; }
+#claude-row { display: flex; flex-direction: column; gap: 6px; }
+
+/* ———— 视图 ———— */
+.view { padding-top: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px 14px; min-width: 0; transition: outline-color .3s, box-shadow .3s; outline: 1px solid transparent; }
+.card.spot, .spot { outline: 1px solid var(--flow); box-shadow: 0 0 0 4px rgba(141,180,255,.14); }
+.card > h2, .sect-h {
+  margin: 0 0 10px; font-size: 13.5px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; text-wrap: balance;
+}
+.card > h2 i, .sect-h i { font-style: normal; color: var(--flow); }
+.card > h2 small, .sect-h small { color: var(--dim); font-weight: 400; font-size: 11px; font-family: var(--font-data); }
+.card > h2 .end { margin-left: auto; display: flex; gap: 8px; align-items: baseline; }
+h3.sub { margin: 14px 0 6px; font-size: 12px; font-weight: 600; color: var(--dim); display: flex; gap: 8px; align-items: baseline; }
+h3.sub small { margin-left: auto; color: var(--faint); font-weight: 400; font-size: 10.5px; font-family: var(--font-data); }
 .note { margin: 8px 0 0; color: var(--faint); font-size: 11px; }
 .tag { font-size: 10px; color: var(--dim); border: 1px solid var(--line); border-radius: 2px; padding: 0 4px; margin-left: 4px; font-weight: 400; }
 
-/* ① 摄像头 */
-.cam { position: relative; aspect-ratio: 4 / 3; background: #08090a; border: 1px solid var(--line); overflow: hidden; max-width: 100%; }
-.cam video { display: none; }
-.cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.cam-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 11.5px; text-align: center; padding: 16px; pointer-events: none; }
-.people { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-family: var(--font-data); font-size: 11px; color: var(--dim); min-height: 18px; }
-.people b { color: var(--ink); font-weight: 600; margin-right: 6px; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
+.split.narrow { grid-template-columns: minmax(0, 1fr) 290px; }
+.rail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.rail.small .cloud { height: 130px; }
+#hall-brain .cloud { height: 150px; }
+#hall-brain .meter { padding-block: 2px; }
+#hall-brain .brain { gap: 8px; }
+.rail.small .brain .mode-sub, .rail.small .meter .tag { display: none; }
 
-/* 条形 + 走势 */
-.frow, .vrow, .wrow, .srow {
-  display: grid; align-items: center; gap: 6px; font-variant-numeric: tabular-nums;
+/* ———— 后台数据（折叠） ———— */
+details.data { margin-top: 14px; border-top: 1px solid var(--line); }
+details.data > summary {
+  list-style: none; cursor: pointer; padding: 10px 0 2px; display: flex; gap: 10px; align-items: baseline; color: var(--dim); font-size: 12px;
 }
-.frow { grid-template-columns: 84px minmax(30px, 1fr) 34px 64px; padding-block: 3px; border-bottom: 1px dashed var(--line); }
-.frow .to { grid-column: 1 / -1; color: var(--faint); font-size: 10.5px; margin-top: -2px; }
+details.data > summary::-webkit-details-marker { display: none; }
+details.data > summary::before { content: "▸"; color: var(--flow); font-size: 11px; transition: transform .15s; display: inline-block; }
+details.data[open] > summary::before { transform: rotate(90deg); }
+details.data > summary b { color: var(--ink); font-weight: 600; }
+details.data > summary small { color: var(--faint); font-size: 11px; }
+.data-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; padding-top: 10px; align-items: start; }
+.box { background: var(--raise); border: 1px solid var(--line); border-radius: 3px; padding: 10px 12px; min-width: 0; }
+.box > h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.box > h3 small { margin-left: auto; color: var(--faint); font-weight: 400; font-size: 10.5px; font-family: var(--font-data); }
+
+/* ———— 全流程：流水线卡片 ———— */
+.stages { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.stages li { position: relative; min-width: 0; }
+.stages li:not(:last-child)::after {
+  content: "→"; position: absolute; right: -12px; top: 50%; transform: translate(50%, -50%);
+  color: var(--faint); font-family: var(--font-data); pointer-events: none;
+}
+.stage-card {
+  width: 100%; text-align: left; display: flex; flex-direction: column; gap: 6px; padding: 9px 10px; border-radius: 4px;
+  background: linear-gradient(90deg, rgba(141,180,255,calc(var(--act, 0) * .32)) 0%, rgba(141,180,255,0) 75%), var(--panel);
+  border: 1px solid var(--line); white-space: normal;
+}
+.stage-card.hot { border-color: rgba(141,180,255,.6); }
+.stage-card[aria-selected="true"] { border-color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
+.sc-h { font-weight: 600; font-size: 12.5px; display: flex; gap: 6px; align-items: baseline; }
+.sc-h i { font-style: normal; color: var(--flow); }
+.sc-h small { color: var(--dim); font-weight: 400; font-size: 11px; }
+.sc-vis { height: 58px; display: flex; flex-direction: column; justify-content: center; gap: 5px; min-width: 0; }
+.sc-vis canvas { width: 100%; height: 58px; display: block; border-radius: 2px; background: #08090a; }
+.sc-foot { color: var(--dim); font-family: var(--font-data); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 6px; align-items: center; font-size: 10.5px; color: var(--ink); opacity: .8; }
+.mini .bar { height: 5px; }
+.sc-mode { font-size: 14px; font-weight: 600; }
+.sc-utter { font-size: 12px; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sc-utter.empty { color: var(--faint); }
+
+.stage-detail { margin-top: 14px; }
+.stage-detail > .card > h2 .end button { font-size: 11.5px; }
+.stage-detail .cam { max-width: calc(64vh * 4 / 3); }
+.lead { margin: -4px 0 12px; color: var(--dim); max-width: 75ch; }
+.surface { display: grid; gap: 14px; align-items: start; }
+.surface.two { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+.surface.img { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+
+/* ———— 条形图、刻度、走势 ———— */
 .bar { position: relative; height: 6px; background: var(--well); border-radius: 1px; overflow: hidden; }
 .bar b { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--ink); }
-.val { text-align: right; font-family: var(--font-data); font-size: 11px; }
+.val { text-align: right; font-family: var(--font-data); font-size: 11px; font-variant-numeric: tabular-nums; }
 canvas.spark { width: 100%; height: 18px; display: block; }
 .osc { display: block; margin-top: 8px; font: 10.5px/1.4 var(--font-data); color: var(--flow); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.vrow { grid-template-columns: 1fr 40px; padding-block: 5px 6px; border-bottom: 1px dashed var(--line); }
+.meter { display: grid; grid-template-columns: 82px minmax(40px, 1fr) 36px; gap: 8px; align-items: center; padding-block: 3px; }
+.meter .nm { white-space: nowrap; }
+.meter .mbar { position: relative; height: 8px; background: var(--well); border-radius: 1px; }
+.meter .mbar b { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 1px; transition: width .15s linear; }
+.meter .mbar i { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: .55; }
+.meters.big .meter { grid-template-columns: 110px minmax(60px, 1fr) 44px; padding-block: 6px; font-size: 13px; }
+.meters.big .meter .mbar { height: 12px; }
+.meters.big .meter .val { font-size: 12.5px; }
+
+.fbig { display: grid; grid-template-columns: 110px minmax(60px, 1fr) 44px 108px; gap: 10px; align-items: center; padding-block: 7px; border-bottom: 1px dashed var(--line); font-size: 13px; }
+.fbig .bar { height: 12px; }
+.fbig .bar b { background: var(--flow); }
+.fbig .to { color: var(--faint); font-size: 11px; }
+
+.frow { display: grid; grid-template-columns: 84px minmax(30px, 1fr) 34px 64px; gap: 6px; align-items: center; padding-block: 3px; border-bottom: 1px dashed var(--line); font-variant-numeric: tabular-nums; }
+.frow .to { grid-column: 1 / -1; color: var(--faint); font-size: 10.5px; margin-top: -2px; }
+.vrow { display: grid; grid-template-columns: 1fr 40px; gap: 6px; align-items: center; padding-block: 5px 6px; border-bottom: 1px dashed var(--line); }
 .vrow .nm { font-weight: 600; }
 .vrow canvas { grid-column: 1 / -1; width: 100%; height: 30px; display: block; }
 .vrow .see { grid-column: 1 / -1; color: var(--faint); font-size: 10.5px; margin-top: -2px; }
 
-/* 状态机图 */
-svg.sm { width: 100%; height: auto; display: block; font-family: var(--font-ui); }
+/* ———— 状态机图 ———— */
+svg.sm { width: 100%; height: auto; display: block; font-family: var(--font-ui); max-width: 470px; }
 svg.sm text { fill: var(--ink); }
 svg.sm .sub { fill: var(--dim); font-size: 9.5px; }
 svg.sm .ln { stroke: var(--faint); fill: none; stroke-width: 1.1; }
@@ -148,86 +217,165 @@ svg.sm .bx { fill: transparent; stroke: var(--faint); stroke-width: 1.1; transit
 svg.sm .dm { fill: transparent; stroke: var(--faint); stroke-width: 1.1; }
 svg.sm g.on .bx { stroke-width: 2; }
 svg.sm .acc { fill: var(--flow); font-size: 9.5px; }
-svg.sm .mk { fill: var(--faint); }
+.sm-line { display: flex; gap: 10px; align-items: baseline; color: var(--dim); font-size: 11.5px; margin-bottom: 4px; font-family: var(--font-data); }
 
-.srow { grid-template-columns: 74px minmax(40px, 1fr) 32px 44px; padding-block: 2px; font-size: 11.5px; }
+.srow { display: grid; grid-template-columns: 74px minmax(40px, 1fr) 32px 52px; gap: 6px; align-items: center; padding-block: 2px; font-size: 11.5px; }
 .srow .bar { height: 8px; overflow: visible; }
 .srow .bar::before, .srow .bar::after { content: ""; position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--dim); }
 .srow .bar::before { left: 55%; opacity: .5; }
 .srow .bar::after { left: 70%; }
 .srow .bias { color: var(--faint); font-family: var(--font-data); font-size: 10.5px; text-align: right; }
-
 .kv { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--font-data); font-size: 11px; color: var(--dim); margin-top: 6px; }
 .kv b { color: var(--ink); font-weight: 500; }
 
-/* 日志 */
-.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 190px; overflow-y: auto; font-size: 11.5px; }
+/* ———— 日志 ———— */
+.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; font-size: 11.5px; }
 .log li { padding: 4px 0 4px 8px; border-left: 2px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
 .log li time { color: var(--faint); font-family: var(--font-data); font-size: 10.5px; margin-right: 6px; }
-.log.small { max-height: 130px; font-size: 11px; }
+.log.small { max-height: 150px; font-size: 11px; }
 .log.osc li { font: 10.5px/1.35 var(--font-data); color: var(--dim); border-left-color: transparent; padding: 1px 0; }
-.st { display: inline-block; font-size: 10px; padding: 0 5px; border-radius: 2px; margin-left: 4px; border: 1px solid currentColor; }
+.st { display: inline-block; font-size: 10px; padding: 0 5px; border-radius: 2px; margin-left: 4px; border: 1px solid currentColor; white-space: nowrap; }
 .st.ok { color: var(--ok); }
 .st.truncated { color: var(--warn); }
 .st.rejected { color: var(--bad); }
 .st.skipped { color: var(--dim); }
 .tool { font-family: var(--font-data); color: var(--flow); }
 .args { display: block; color: var(--dim); font-family: var(--font-data); font-size: 10.5px; }
-
-.wrow { grid-template-columns: 74px minmax(40px, 1fr) 34px; padding-block: 3px; }
+.wrow { display: grid; grid-template-columns: 74px minmax(40px, 1fr) 34px; gap: 6px; align-items: center; padding-block: 3px; }
 .wrow .desc { grid-column: 1 / -1; color: var(--faint); font-size: 10.5px; margin-top: -3px; }
 .wrow.fire .bar b { background: var(--flow); }
 pre#report {
-  margin: 0; background: #0b0d0f; border: 1px solid var(--line); padding: 8px; max-height: 260px; overflow: auto;
+  margin: 0; background: #0b0d0f; border: 1px solid var(--line); padding: 8px; max-height: 320px; overflow: auto;
   font: 10.5px/1.45 var(--font-data); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .imp { display: inline-block; min-width: 18px; text-align: center; font-family: var(--font-data); font-size: 10px; border-radius: 2px; background: var(--well); margin-right: 6px; }
 
-/* ⑤ 图像 */
-.stage { position: relative; aspect-ratio: 16 / 10; background: #0a0b0d; border: 1px solid var(--line); overflow: hidden; max-width: 100%; }
-.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.stage .fail { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); padding: 16px; text-align: center; }
+/* ———— 摄像头 ———— */
+.cam { position: relative; aspect-ratio: 4 / 3; background: #08090a; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; width: 100%; }
+.cam video { display: none; }
+.cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cam-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 11.5px; text-align: center; padding: 16px; pointer-events: none; }
+.cam-status { position: absolute; left: 8px; bottom: 6px; font: 10.5px var(--font-data); color: var(--dim); background: rgba(8,9,10,.7); padding: 1px 6px; border-radius: 2px; pointer-events: none; }
+.people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
+.people b { color: var(--ink); font-weight: 600; margin-right: 8px; font-family: var(--font-data); }
+.people.data { font-family: var(--font-data); font-size: 11px; }
 
-/* 词库 */
-.cloud { position: relative; height: 170px; border: 1px solid var(--line); background: radial-gradient(ellipse at 50% 120%, #151a20 0%, #0b0d0f 70%); overflow: hidden; }
+/* ———— 大脑与词汇 ———— */
+.brain { display: flex; flex-direction: column; gap: 10px; }
+.mode-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.mode-name { font-size: 20px; font-weight: 600; line-height: 1.1; }
+.mode-sub { color: var(--dim); font-size: 11.5px; }
+.mode-t { margin-left: auto; color: var(--faint); font: 11px var(--font-data); }
+.mind-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 11.5px; color: var(--dim); }
+.mind-line .end { margin-left: auto; }
+.utter { margin: 0; padding: 8px 10px; background: var(--raise); border-left: 2px solid var(--flow); font-size: 13px; line-height: 1.55; }
+.utter small { display: block; color: var(--faint); font: 10.5px var(--font-data); margin-top: 2px; }
+.utter.empty { color: var(--faint); border-left-color: var(--line); font-size: 12px; }
+
+.cloud { position: relative; height: 180px; border: 1px solid var(--line); border-radius: 3px; background: radial-gradient(ellipse at 50% 120%, #151a20 0%, #0b0d0f 70%); overflow: hidden; }
 .cloud span {
   position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: var(--ink);
   transition: left .8s, top .8s, font-size .8s, opacity .8s, color .3s, text-shadow .3s; animation: drift 9s ease-in-out infinite alternate;
 }
 .cloud span.lit { color: var(--flow); text-shadow: 0 0 12px rgba(141,180,255,.8); }
-.cloud .empty { color: var(--faint); font-size: 11px; left: 50%; top: 50%; animation: none; }
+.cloud .empty { color: var(--faint); font-size: 11px; left: 50%; top: 50%; animation: none; white-space: normal; text-align: center; width: 80%; }
 @keyframes drift { from { margin-top: -3px; } to { margin-top: 3px; } }
 #trajectory li b { color: var(--flow); font-weight: 500; }
 
-/* 声音 */
-#phys-cv { width: 100%; aspect-ratio: 10 / 6; display: block; background: #0b0d0f; border: 1px solid var(--line); margin-top: 8px; }
+/* ———— 图像 ———— */
+.stage { position: relative; aspect-ratio: 16 / 10; background: #0a0b0d; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; width: 100%; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.stage .fail { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); padding: 16px; text-align: center; }
+.stage .immerse { position: absolute; right: 10px; top: 10px; background: rgba(13,15,17,.75); }
+#v-hall .stage { max-height: calc(100vh - 170px); }
+.under { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; margin-top: 8px; color: var(--dim); font-size: 11.5px; }
+.under b { color: var(--ink); font-weight: 500; }
 
-/* 展厅视图 */
-body.expo #controls, body.expo #pipe, body.expo #claude-row { display: none !important; }
-body.expo .col > .panel:not(#p-image):not(#p-lexicon) { display: none; }
-body.expo #p-image { position: fixed; inset: 0; z-index: 10; border: 0; border-radius: 0; padding: 0; background: #000; }
-body.expo #p-image h2 { display: none; }
-body.expo #p-image .stage { height: 100%; aspect-ratio: auto; border: 0; }
-body.expo #p-lexicon { position: fixed; left: 0; right: 0; top: 54px; z-index: 11; background: transparent; border: 0; padding: 0; pointer-events: none; }
-body.expo #p-lexicon > :not(.cloud) { display: none; }
-body.expo .cloud { height: 26vh; border: 0; background: linear-gradient(#000c, #0000); }
-body.expo .cloud span { text-shadow: 0 0 10px #000; }
-body.expo #top { background: rgba(0,0,0,.6); border-bottom-color: transparent; position: fixed; left: 0; right: 0; padding-inline: 16px; }
-body.expo #expo-hud { display: block; }
-#expo-hud { display: none; position: fixed; z-index: 12; left: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); font: 11px/1.5 var(--font-data); color: var(--dim); }
+/* ———— 声音 ———— */
+#phys-cv { width: 100%; aspect-ratio: 10 / 6; display: block; background: #0b0d0f; border: 1px solid var(--line); }
 
-/* 演示字幕 */
+/* ———— 思考过程 ———— */
+.think-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.think-head h2 { margin: 0; font-size: 15px; }
+.think-head .end { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.think-status { font: 12px var(--font-data); color: var(--dim); }
+.think-status.busy { color: var(--flow); }
+.think-wake #wake-rows { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 14px; }
+.think-wake .wrow { grid-template-columns: minmax(0, 1fr) 34px; }
+.think-wake .wrow > span:first-child { grid-column: 1 / -1; }
+.think-wake .wrow .bar { grid-column: 1; }
+.think-wake .wrow .val { grid-column: 2; grid-row: 2; }
+.think-wake .kv, .think-wake .note { display: none; }
+.steps { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 0; counter-reset: st; }
+.steps > li { position: relative; padding: 0 0 18px 34px; border-left: 1px solid var(--line); margin-left: 11px; }
+.steps > li:last-child { border-left-color: transparent; }
+.steps > li::before {
+  counter-increment: st; content: counter(st); position: absolute; left: -12px; top: -2px; width: 23px; height: 23px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--panel); border: 1px solid var(--flow); color: var(--flow); font: 600 11px var(--font-data);
+}
+.steps > li.wait::before { border-color: var(--faint); color: var(--faint); }
+.steps h4 { margin: 0 0 8px; font-size: 13.5px; font-weight: 600; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.steps h4 small { color: var(--faint); font: 11px var(--font-data); font-weight: 400; }
+.steps p { margin: 4px 0; }
+.dim { color: var(--dim); }
+.readgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+.rv { background: var(--raise); border: 1px solid var(--line); border-radius: 3px; padding: 6px 8px; }
+.rv.hi { border-color: var(--warn); }
+.rv span { display: block; color: var(--dim); font-size: 11px; }
+.rv b { font: 600 15px var(--font-data); }
+.rv small { color: var(--faint); font: 10.5px var(--font-data); margin-left: 6px; }
+.facts { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 4px 10px; font-size: 12px; }
+.facts dt { color: var(--faint); }
+.facts dd { margin: 0; }
+.calls { display: grid; gap: 8px; }
+.call { background: var(--raise); border: 1px solid var(--line); border-left: 3px solid var(--ok); border-radius: 3px; padding: 8px 10px; }
+.call.truncated { border-left-color: var(--warn); }
+.call.rejected { border-left-color: var(--bad); }
+.call header { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.call header b { font-size: 13px; }
+.call header code { font: 11px var(--font-data); color: var(--flow); }
+.call header .st { margin-left: auto; }
+.call dl { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 2px 8px; margin: 6px 0 0; font-size: 12px; }
+.call dt { color: var(--faint); }
+.call dd { margin: 0; overflow-wrap: anywhere; }
+.call .why { color: var(--warn); font-size: 11.5px; margin-top: 4px; }
+.call.rejected .why { color: var(--bad); }
+.changes { display: flex; flex-wrap: wrap; gap: 8px; }
+.change { background: var(--raise); border: 1px solid var(--line); border-radius: 3px; padding: 6px 10px; font-size: 12px; }
+.change span { color: var(--faint); font-size: 11px; display: block; }
+.word { display: inline-block; padding: 1px 8px; border: 1px solid var(--flow); color: var(--flow); border-radius: 999px; margin: 2px 4px 2px 0; font-size: 12.5px; }
+.history { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.history button { font-size: 11px; font-family: var(--font-data); }
+.history button[aria-pressed="true"] { border-color: var(--flow); color: var(--flow); }
+.empty-state { padding: 28px 0; color: var(--dim); max-width: 60ch; }
+.empty-state p { margin: 0 0 12px; }
+.spin { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--flow); border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ———— 沉浸投影 ———— */
+#immersive { position: fixed; inset: 0; z-index: 60; background: #000; }
+#immersive [data-slot="image"] { position: absolute; inset: 0; }
+#immersive [data-slot] > [data-widget] { height: 100%; }
+#immersive .stage { height: 100%; aspect-ratio: auto; border: 0; border-radius: 0; max-height: none; }
+#immersive .stage .immerse { display: none; }
+#immersive [data-slot="cloud"] { position: absolute; left: 0; right: 0; top: 0; height: 28vh; pointer-events: none; }
+#immersive .cloud { height: 100%; border: 0; border-radius: 0; background: linear-gradient(#000c, #0000); }
+#immersive .cloud span { text-shadow: 0 0 10px #000; }
+#expo-hud { position: absolute; left: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); font: 11px/1.5 var(--font-data); color: var(--dim); }
+#immersive .exit { position: absolute; right: 16px; top: calc(env(safe-area-inset-top, 0px) + 14px); background: rgba(13,15,17,.7); }
+
+/* ———— 演示字幕 ———— */
 #caption {
-  position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  position: fixed; z-index: 55; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
   width: min(760px, calc(100% - 32px)); background: rgba(12,14,17,.95); border: 1px solid var(--flow); border-radius: 4px;
   padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start; box-shadow: 0 10px 40px rgba(0,0,0,.5);
 }
 #caption .n { font-family: var(--font-data); color: var(--flow); font-size: 11px; padding-top: 2px; white-space: nowrap; }
 #caption p { margin: 0; flex: 1; font-size: 13.5px; line-height: 1.6; text-wrap: pretty; }
 
-/* 开始界面 */
-#start { position: fixed; inset: 0; z-index: 40; background: rgba(9,10,12,.96); display: grid; place-items: center; padding: 16px; overflow-y: auto; }
-#start .card { max-width: 640px; width: 100%; }
+/* ———— 开始界面 ———— */
+#start { position: fixed; inset: 0; z-index: 70; background: rgba(9,10,12,.96); display: grid; place-items: center; padding: 16px; overflow-y: auto; }
+#start .card { max-width: 640px; width: 100%; background: transparent; border: 0; }
 #start h1 { font: 600 34px/1 var(--font-data); letter-spacing: .4em; margin: 0 0 10px; }
 #start .lead { color: var(--dim); margin: 0 0 18px; font-size: 14px; }
 #start p { max-width: 62ch; }
@@ -239,16 +387,25 @@ body.expo #expo-hud { display: block; }
 #start .fine { color: var(--faint); font-size: 11.5px; }
 #start .err { color: var(--bad); }
 
-@media (max-width: 1280px) { #grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 760px) {
-  #grid { grid-template-columns: minmax(0, 1fr); }
-  #pipe { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #pipe li::after { display: none; }
+@media (max-width: 1100px) {
+  .split, .split.narrow { grid-template-columns: minmax(0, 1fr); }
+  .rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .stages { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .stages li::after { display: none; }
+  .surface.two, .surface.img { grid-template-columns: minmax(0, 1fr); }
+  .think-wake #wake-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tabs { margin-inline: 0; order: 3; width: 100%; }
+  .tabs button { flex: 1; padding-inline: 6px; }
+  .readgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fbig { grid-template-columns: 84px minmax(40px, 1fr) 40px; }
+  .fbig .to { grid-column: 1 / -1; margin-top: -4px; }
   #start .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .brand span { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cloud span { animation: none; }
+  .cloud span, .spin { animation: none; }
   * { transition: none !important; }
 }
 </style>
@@ -256,135 +413,313 @@ body.expo #expo-hud { display: block; }
 <body>
 
 <header id="top">
-  <div class="brand"><b>TONOS</b><span>以展厅为身体的人工生命 · 浏览器 demo</span></div>
+  <div class="brand"><b>TONOS</b></div>
   <div class="clockbox"><span id="clock">D1 10:00</span><span id="mode-chip" class="chip" style="color: var(--m-rest)">静息</span></div>
-  <div class="views"><button id="v-flow" class="on" type="button">全流程</button><button id="v-expo" type="button">展厅</button></div>
+  <nav class="tabs" role="tablist" aria-label="视图">
+    <button type="button" role="tab" data-view="hall" aria-selected="true">展厅<kbd>1</kbd></button>
+    <button type="button" role="tab" data-view="think" aria-selected="false">思考<kbd>2</kbd></button>
+    <button type="button" role="tab" data-view="flow" aria-selected="false">全流程<kbd>3</kbd></button>
+  </nav>
+  <div class="acts">
+    <button id="btn-cam" type="button">开摄像头</button>
+    <div class="menu">
+      <button id="btn-sim" type="button" aria-haspopup="true" aria-expanded="false">模拟观众 ▾</button>
+      <div id="scenarios" class="pop" hidden><span class="hint">一个人测不了多人效果时用</span></div>
+    </div>
+    <button id="btn-sound" type="button">声音 开</button>
+    <button id="btn-demo" type="button" class="primary">自动演示</button>
+    <button id="btn-ctl" type="button" aria-expanded="false" aria-controls="drawer">⚙ 控制</button>
+  </div>
 </header>
 
-<nav id="controls" aria-label="控制">
-  <div class="grp"><span class="lbl">输入</span>
-    <button id="btn-cam" type="button">开摄像头</button>
-    <select id="calib" aria-label="距离标定"><option value="desk">桌面距离（坐在电脑前）</option><option value="hall">展厅距离（站远处）</option></select>
-  </div>
-  <div class="grp" id="scenarios"><span class="lbl">模拟观众</span></div>
-  <div class="grp"><span class="lbl">时间</span>
-    <button id="btn-speed" type="button">演示加速 60×</button>
-    <button id="btn-close" type="button">闭馆 → 下一天</button>
-  </div>
-  <div class="grp"><span class="lbl">认知</span>
-    <button id="btn-mind" type="button" class="on">认知层 开</button>
-    <select id="engine" aria-label="解释器"><option value="sim">规则模拟解释器</option><option value="claude">真实 Claude（需 Key）</option></select>
-    <button id="btn-wake" type="button">立即唤醒</button>
-  </div>
-  <div class="grp"><span class="lbl">声音</span>
-    <button id="btn-sound" type="button">声音 开</button>
-    <input id="vol" type="range" min="0" max="1" step="0.01" value="0.7" aria-label="音量">
-  </div>
-  <div class="grp">
-    <button id="btn-demo" type="button" class="primary">自动演示</button>
-    <button id="btn-reset" type="button">重置展期</button>
-  </div>
-</nav>
-<div id="claude-row" hidden>
-  <label for="api-key">Anthropic API Key</label>
-  <input id="api-key" type="password" placeholder="sk-ant-…" autocomplete="off">
-  <select id="model" aria-label="模型"></select>
-  <span>Key 只保存在你这台电脑的浏览器里，直接发给 api.anthropic.com。</span>
-</div>
+<aside id="drawer" hidden aria-label="控制">
+  <header><b>控制</b><button id="drawer-close" type="button" class="ghost">关闭 ✕</button></header>
+  <section>
+    <h3>输入</h3>
+    <label for="calib">距离标定：骨架多大算"贴近主屏"</label>
+    <select id="calib"><option value="desk">桌面距离（坐在电脑前）</option><option value="hall">展厅距离（站远处）</option></select>
+  </section>
+  <section>
+    <h3>时间</h3>
+    <div class="row"><button id="btn-speed" type="button">演示加速 60×</button><button id="btn-close" type="button">闭馆 → 下一天</button></div>
+    <p class="note">加速时真实 1 秒 = 展期 1 分钟，按小时、按天变化的变量才看得出来。闭馆会把沉积、设定点、词库和记忆存到浏览器里。</p>
+  </section>
+  <section>
+    <h3>认知</h3>
+    <div class="row"><button id="btn-mind" type="button" class="on">认知层 开</button><button id="btn-wake" type="button">立即唤醒</button></div>
+    <label for="engine">解释器</label>
+    <select id="engine"><option value="sim">规则模拟解释器</option><option value="claude">真实 Claude（需 Key）</option></select>
+    <div id="claude-row" hidden>
+      <label for="api-key">Anthropic API Key</label>
+      <input id="api-key" type="password" placeholder="sk-ant-…" autocomplete="off">
+      <label for="model">模型</label>
+      <select id="model"></select>
+      <p class="note">Key 只保存在你这台电脑的浏览器里，直接发给 api.anthropic.com。</p>
+    </div>
+  </section>
+  <section>
+    <h3>声音</h3>
+    <div class="row"><label for="vol">音量</label><input id="vol" type="range" min="0" max="1" step="0.01" value="0.7"></div>
+  </section>
+  <section>
+    <h3>存档</h3>
+    <div class="row"><button id="btn-reset" type="button">重置展期</button></div>
+    <p class="note">清掉浏览器里存的展期，从 D1 重新开始。</p>
+  </section>
+  <section>
+    <h3>快捷键</h3>
+    <p class="note">1 展厅 · 2 思考 · 3 全流程 · F 沉浸投影 · Esc 退出沉浸或停止演示</p>
+  </section>
+</aside>
 
-<ol id="pipe">
-  <li data-s="1"><b><i>①</i>采集</b><span id="pipe-1">没有人</span></li>
-  <li data-s="2"><b><i>②</i>转换</b><span id="pipe-2">/perturb 30Hz</span></li>
-  <li data-s="3"><b><i>③</i>内核</b><span id="pipe-3">静息</span></li>
-  <li data-s="4"><b><i>④</i>认知</b><span id="pipe-4">休眠中</span></li>
-  <li data-s="5"><b><i>⑤</i>表达</b><span id="pipe-5">自语</span></li>
-</ol>
-
-<main id="grid">
-  <section class="col">
-    <article class="panel" id="p-capture">
-      <h2><i>①</i>采集 · 骨骼绑定 <small id="cap-status">摄像头未开启</small></h2>
-      <div class="cam">
-        <video id="video" playsinline muted></video>
-        <canvas id="cam-cv"></canvas>
-        <div class="cam-empty" id="cam-empty">没有画面<br>开摄像头，或在上方点一个模拟观众场景</div>
-      </div>
-      <ul id="people" class="people"></ul>
-    </article>
-    <article class="panel" id="p-features">
-      <h2><i>②</i>转换 · 扰动向量 <small>/perturb · 30 Hz → 内核</small></h2>
-      <div id="feat-rows"></div>
-      <code id="perturb-line" class="osc">/perturb …</code>
-      <h3>行为模式摘要 <small id="pat-next">每 20 秒</small></h3>
-      <ol id="patterns" class="log small"></ol>
-      <p class="note">摘要不进内核，只在 LLM 被唤醒时交给它：内核感受到的是数值，它"脑子里"形成的是语义。</p>
-    </article>
+<main id="views">
+  <!-- 视图一：展厅 -->
+  <section class="view" id="v-hall" data-view="hall">
+    <div class="split">
+      <article class="card" id="hall-body">
+        <h2><i>⑤</i>身体 · 图像 <small>慢</small><span class="end"><small id="hall-mode-t"></small></span></h2>
+        <div data-slot="image"></div>
+        <div class="under"><span>声音 <b id="hall-sound">自语 · 相位偏移</b></span><span>色块是它自己的状态（慢、叠加）；细线是观众对它的神经挑动（快、线性、带噪波）。节点发声时泛起涟漪。</span></div>
+      </article>
+      <aside class="rail">
+        <article class="card" id="hall-cam"><h2><i>①</i>摄像头 · 骨骼绑定</h2><div data-slot="cam"></div></article>
+        <article class="card" id="hall-brain"><h2><i>③④</i>大脑与词汇</h2><div data-slot="brain"></div><h3 class="sub">语义词库 <small id="lex-count">0 个词</small></h3><div data-slot="cloud"></div></article>
+      </aside>
+    </div>
   </section>
 
-  <section class="col">
-    <article class="panel" id="p-kernel">
-      <h2><i>③</i>内核 · 6 个变量 <small>实线 = 当前值 · 虚线 = 设定点 · 近 60 秒</small></h2>
-      <div id="var-rows"></div>
-    </article>
-    <article class="panel" id="p-state">
-      <h2>状态机 <small id="mode-time"></small></h2>
-      <div id="sm-kernel"></div>
-      <div id="score-rows"></div>
-      <p class="note">偏离最大的变量决定模式。竖线：退出 0.55 / 进入 0.70；每种模式至少停留 20 秒（防抖）。</p>
-    </article>
-    <article class="panel" id="p-learn">
-      <h2>新奇度 · 学习进展 <small>LP = 近期平均误差 − 当前平均误差</small></h2>
-      <canvas id="lp-cv" class="spark" style="height:46px"></canvas>
-      <div class="kv"><span>预测误差 e <b id="k-err">0</b></span><span>LP <b id="k-lp">0</b></span><span>停滞 <b id="k-stag">0</b></span></div>
-      <h3>内核日志</h3>
-      <ol id="kernel-log" class="log small"></ol>
-    </article>
+  <!-- 视图二：思考 -->
+  <section class="view" id="v-think" data-view="think" hidden>
+    <div class="split narrow">
+      <article class="card" id="think-main"><div data-slot="think"></div></article>
+      <aside class="rail small">
+        <article class="card"><h2><i>①</i>摄像头</h2><div data-slot="cam"></div></article>
+        <article class="card"><h2><i>③④</i>大脑与词汇</h2><div data-slot="brain"></div><div data-slot="cloud" style="margin-top:10px"></div></article>
+      </aside>
+    </div>
   </section>
 
-  <section class="col">
-    <article class="panel" id="p-mind">
-      <h2><i>④</i>认知 · 慢循环 <small id="mind-status">休眠中</small></h2>
-      <div id="wake-rows"></div>
-      <div class="kv"><span>已唤醒 <b id="m-wakes">0</b> 次</span><span>解释器 <b id="m-engine">规则模拟</b></span><span id="m-skip"></span></div>
-      <p class="note">快环从不等它：LLM 超时或关闭时，内核、声音和图像照常运行，只是不再发育。</p>
-    </article>
-    <article class="panel" id="p-report">
-      <h2>内感受报告 <small id="report-at">还没有唤醒</small></h2>
-      <pre id="report">内核唤醒 LLM 时，这里显示它读到的那份关于自己身体的报告。</pre>
-    </article>
-    <article class="panel" id="p-tools">
-      <h2>工具调用 <small>限制写在代码里强制执行</small></h2>
-      <ol id="tools" class="log"></ol>
-      <p class="note" id="mind-text"></p>
-    </article>
-    <article class="panel" id="p-memory">
-      <h2>记忆流 <small>跨展期保存</small></h2>
-      <ol id="memory" class="log small"></ol>
-    </article>
-  </section>
+  <!-- 视图三：全流程 -->
+  <section class="view" id="v-flow" data-view="flow" hidden>
+    <ol id="pipe" class="stages" role="tablist" aria-label="五层">
+      <li><button type="button" class="stage-card" role="tab" data-stage="1">
+        <span class="sc-h"><i>①</i>采集<small>骨骼绑定</small></span>
+        <span class="sc-vis"><canvas id="thumb-cam"></canvas></span>
+        <span class="sc-foot" id="pipe-1">没有人</span></button></li>
+      <li><button type="button" class="stage-card" role="tab" data-stage="2">
+        <span class="sc-h"><i>②</i>转换<small>扰动向量</small></span>
+        <span class="sc-vis" id="sc2"></span>
+        <span class="sc-foot" id="pipe-2">/perturb 30Hz</span></button></li>
+      <li><button type="button" class="stage-card" role="tab" data-stage="3">
+        <span class="sc-h"><i>③</i>内核<small>自我稳定</small></span>
+        <span class="sc-vis"><span class="sc-mode" id="sc3-mode">静息</span><span id="sc3"></span></span>
+        <span class="sc-foot" id="pipe-3">静息</span></button></li>
+      <li><button type="button" class="stage-card" role="tab" data-stage="4">
+        <span class="sc-h"><i>④</i>认知<small>LLM 慢循环</small></span>
+        <span class="sc-vis"><span class="sc-utter empty" id="sc4-utter">还没有话语</span></span>
+        <span class="sc-foot" id="pipe-4">休眠中</span></button></li>
+      <li><button type="button" class="stage-card" role="tab" data-stage="5">
+        <span class="sc-h"><i>⑤</i>表达<small>声音 · 词库 · 图像</small></span>
+        <span class="sc-vis"><canvas id="thumb-img"></canvas></span>
+        <span class="sc-foot" id="pipe-5">自语</span></button></li>
+    </ol>
 
-  <section class="col">
-    <article class="panel" id="p-image">
-      <h2><i>⑤</i>图像 · 慢 <small id="img-params"></small></h2>
-      <div class="stage"><canvas id="body-cv"></canvas><canvas id="map-cv"></canvas><div class="fail" id="img-fail" hidden></div></div>
-      <p class="note">展厅的俯视自身地图：观众以扰动出现在真实位置，节点发声时泛起涟漪。画面不跟手走。</p>
-    </article>
-    <article class="panel" id="p-lexicon">
-      <h2>语义词库 · 中 <small id="lex-count">0 个词</small></h2>
-      <div id="cloud" class="cloud"></div>
-      <h3>意义轨迹 <small>话语原文，不念出来</small></h3>
-      <ol id="trajectory" class="log small"></ol>
-    </article>
-    <article class="panel" id="p-sound">
-      <h2>声音 · 快 <small><span id="snd-state">自语</span> · <span id="snd-ens">相位偏移</span></small></h2>
-      <div id="sm-sound"></div>
-      <canvas id="phys-cv"></canvas>
-      <ol id="notes" class="log osc small"></ol>
-    </article>
+    <div class="stage-detail" data-stage="1">
+      <article class="card" id="s1">
+        <h2><i>①</i>采集 · 骨骼绑定<span class="end"><button type="button" class="ghost toggle-all">全部展开</button></span></h2>
+        <p class="lead">摄像头识别骨骼（最多 4 人），按质心最近邻给每人绑定一个稳定 ID。画面只在浏览器里识别，不上传。</p>
+        <div class="surface two"><div data-slot="cam"></div><div><h3 class="sub" style="margin-top:0">在场的人</h3><div data-slot="people"></div></div></div>
+        <details class="data" data-key="s1"><summary><b>后台数据</b><small>识别状态 · 每人能量与举手</small></summary>
+          <div class="data-body"><div data-slot="cap-data"></div></div></details>
+      </article>
+    </div>
+
+    <div class="stage-detail" data-stage="2" hidden>
+      <article class="card" id="s2">
+        <h2><i>②</i>转换 · 扰动向量<span class="end"><small>/perturb · 30 Hz → 内核</small><button type="button" class="ghost toggle-all">全部展开</button></span></h2>
+        <p class="lead">识别之后不转成语义，也不转成对话，而是压成 7 个数值，每秒 30 次发给内核。</p>
+        <div data-slot="feat-big"></div>
+        <details class="data" data-key="s2"><summary><b>后台数据</b><small>走势线与计算方式 · /perturb 消息 · 行为模式摘要</small></summary>
+          <div class="data-body"><div data-slot="features"></div><div data-slot="patterns"></div></div></details>
+      </article>
+    </div>
+
+    <div class="stage-detail" data-stage="3" hidden>
+      <article class="card" id="s3">
+        <h2><i>③</i>内核 · 信号转换与自我稳定<span class="end"><button type="button" class="ghost toggle-all">全部展开</button></span></h2>
+        <p class="lead">扰动直接推动 6 个变量，按秒、分钟、小时、天四种时间尺度分层。偏离最大的变量决定行为模式，所有模式都回归静息。</p>
+        <div class="surface two"><div data-slot="sm-kernel"></div><div><h3 class="sub" style="margin-top:0">6 个变量 <small>竖线 = 设定点</small></h3><div data-slot="var-meters"></div></div></div>
+        <details class="data" data-key="s3"><summary><b>后台数据</b><small>走势线 · 模式分数与阈值 · 学习进展 · 内核日志</small></summary>
+          <div class="data-body"><div data-slot="vars"></div><div><div data-slot="scores"></div><div data-slot="learn" style="margin-top:14px"></div></div></div></details>
+      </article>
+    </div>
+
+    <div class="stage-detail" data-stage="4" hidden>
+      <article class="card" id="s4">
+        <h2><i>④</i>认知 · LLM 慢循环<span class="end"><button type="button" class="ghost toggle-all">全部展开</button></span></h2>
+        <p class="lead">LLM 不在输入和输出之间，只在内核把它唤醒时工作；读的是内感受报告，只能调用自带限制的工具。</p>
+        <div data-slot="mind-surface"></div>
+        <details class="data" data-key="s4"><summary><b>后台数据</b><small>唤醒条件 · 内感受报告 · 工具调用 · 记忆流</small></summary>
+          <div class="data-body"><div><div data-slot="wake"></div><div data-slot="report" style="margin-top:14px"></div></div><div><div data-slot="tools"></div><div data-slot="memory" style="margin-top:14px"></div></div></div></details>
+      </article>
+    </div>
+
+    <div class="stage-detail" data-stage="5" hidden>
+      <article class="card" id="s5">
+        <h2><i>⑤</i>表达 · 三个通道，三种速度<span class="end"><button type="button" class="ghost toggle-all">全部展开</button></span></h2>
+        <p class="lead">声音最快，有人一动就响；语义词库居中，浮在上空；图像最慢，受扰后归于平静，平静的样子本身逐日在变。</p>
+        <div class="surface img"><div data-slot="image"></div><div><div data-slot="cloud"></div><div data-slot="sm-sound" style="margin-top:12px"></div></div></div>
+        <details class="data" data-key="s5"><summary><b>后台数据</b><small>物理世界与 /note 消息 · 图像参数 · 意义轨迹</small></summary>
+          <div class="data-body"><div data-slot="phys"></div><div data-slot="traj"></div></div></details>
+      </article>
+    </div>
   </section>
 </main>
 
-<div id="expo-hud"></div>
+<!-- 组件停车区：每个组件只有一份，切换视图时挪进对应的槽 -->
+<div id="parking" hidden>
+  <div data-widget="cam">
+    <div class="cam">
+      <video id="video" playsinline muted></video>
+      <canvas id="cam-cv"></canvas>
+      <div class="cam-empty" id="cam-empty">没有画面<br>开摄像头，或点「模拟观众」里的一个场景</div>
+      <span class="cam-status" id="cap-status">摄像头未开启</span>
+    </div>
+  </div>
+
+  <div data-widget="people"><ul id="people" class="people"></ul></div>
+
+  <div data-widget="cap-data" class="box">
+    <h3>识别状态</h3>
+    <div class="kv" id="cap-detail"></div>
+    <h3 style="margin-top:12px">每人数据 <small>能量 = 关节帧间位移平方和（去掉抖动）</small></h3>
+    <ul id="people-data" class="people data"></ul>
+  </div>
+
+  <div data-widget="feat-big"><div id="feat-big"></div></div>
+
+  <div data-widget="features" class="box">
+    <h3>7 个特征 · 近 20 秒 <small>从骨骼怎么算 → 推动哪个内核变量</small></h3>
+    <div id="feat-rows"></div>
+    <code id="perturb-line" class="osc">/perturb …</code>
+  </div>
+
+  <div data-widget="patterns" class="box">
+    <h3>行为模式摘要 <small id="pat-next">每 20 秒</small></h3>
+    <ol id="patterns" class="log small"></ol>
+    <p class="note">摘要不进内核，只在 LLM 被唤醒时交给它：内核感受到的是数值，它"脑子里"形成的是语义。</p>
+  </div>
+
+  <div data-widget="sm-kernel">
+    <div class="sm-line"><span>当前</span><b id="sm-mode-name" style="color:var(--ink)">静息</b><span id="mode-time"></span></div>
+    <div id="sm-kernel"></div>
+  </div>
+
+  <div data-widget="var-meters"><div id="var-meters" class="meters big"></div></div>
+
+  <div data-widget="vars" class="box">
+    <h3>6 个变量 · 近 60 秒 <small>实线 = 当前值 · 虚线 = 设定点</small></h3>
+    <div id="var-rows"></div>
+  </div>
+
+  <div data-widget="scores" class="box">
+    <h3>模式分数 <small>竖线：退出 0.55 / 进入 0.70</small></h3>
+    <div id="score-rows"></div>
+    <p class="note">偏离最大的变量决定模式。竖线：退出 0.55 / 进入 0.70；每种模式至少停留 20 秒（防抖）。</p>
+  </div>
+
+  <div data-widget="learn" class="box">
+    <h3>新奇度 · 学习进展 <small>LP = 近期平均误差 − 当前平均误差</small></h3>
+    <canvas id="lp-cv" class="spark" style="height:46px"></canvas>
+    <div class="kv"><span>预测误差 e <b id="k-err">0</b></span><span>LP <b id="k-lp">0</b></span><span>停滞 <b id="k-stag">0</b></span></div>
+    <h3 style="margin-top:12px">内核日志</h3>
+    <ol id="kernel-log" class="log small"></ol>
+  </div>
+
+  <div data-widget="mind-surface">
+    <div class="mind-line" style="font-size:13px"><span>状态 <b id="ms-status" style="color:var(--ink)">休眠中</b></span><span id="ms-last"></span><span class="end"><button type="button" class="link" data-goto="think">在「思考」里看完整过程 →</button></span></div>
+    <p class="utter empty" id="ms-utter" style="margin-top:10px">还没有话语</p>
+  </div>
+
+  <div data-widget="wake" class="box think-wake-src">
+    <h3>唤醒条件 <small id="mind-status">休眠中</small></h3>
+    <div id="wake-rows"></div>
+    <div class="kv"><span>已唤醒 <b id="m-wakes">0</b> 次</span><span>解释器 <b id="m-engine">规则模拟</b></span><span id="m-skip"></span></div>
+    <p class="note">快环从不等它：LLM 超时或关闭时，内核、声音和图像照常运行，只是不再发育。</p>
+  </div>
+
+  <div data-widget="report" class="box">
+    <h3>内感受报告 <small id="report-at">还没有唤醒</small></h3>
+    <pre id="report">内核唤醒 LLM 时，这里显示它读到的那份关于自己身体的报告。</pre>
+  </div>
+
+  <div data-widget="tools" class="box">
+    <h3>工具调用 <small>限制写在代码里强制执行</small></h3>
+    <ol id="tools" class="log"></ol>
+    <p class="note" id="mind-text"></p>
+  </div>
+
+  <div data-widget="memory" class="box">
+    <h3>记忆流 <small>跨展期保存</small></h3>
+    <ol id="memory" class="log small"></ol>
+  </div>
+
+  <div data-widget="image">
+    <div class="stage"><canvas id="body-cv"></canvas><canvas id="nerve-cv"></canvas><canvas id="map-cv"></canvas><div class="fail" id="img-fail" hidden></div>
+      <button type="button" class="immerse" id="btn-immerse" title="图像全屏，词条浮在上方（F）">沉浸投影 ⤢</button></div>
+  </div>
+
+  <div data-widget="cloud"><div id="cloud" class="cloud"></div></div>
+
+  <div data-widget="traj" class="box">
+    <h3>意义轨迹 <small>话语原文，不念出来</small></h3>
+    <ol id="trajectory" class="log small"></ol>
+  </div>
+
+  <div data-widget="sm-sound">
+    <div class="sm-line"><span>声音</span><b id="snd-state" style="color:var(--ink)">自语</b><span>·</span><span id="snd-ens">相位偏移</span></div>
+    <div id="sm-sound"></div>
+  </div>
+
+  <div data-widget="phys" class="box">
+    <h3>物理世界 <small>音符体 · 粒子 · 碰撞即发声</small></h3>
+    <canvas id="phys-cv"></canvas>
+    <ol id="notes" class="log osc small" style="margin-top:8px"></ol>
+    <div class="kv"><span>图像参数 <b id="img-params">—</b></span></div>
+  </div>
+
+  <div data-widget="brain">
+    <div class="brain">
+      <div class="mode-line"><span class="mode-name" id="b-mode">静息</span><span class="mode-sub" id="b-mode-sub">呼吸节律，无输入也在动</span><span class="mode-t" id="b-mode-t"></span></div>
+      <div id="brain-meters" class="meters"></div>
+      <div class="mind-line"><span>认知 <b id="b-mind" style="color:var(--ink)">休眠中</b></span><span class="end"><button type="button" class="link" data-goto="think">看思考过程 →</button></span></div>
+      <p class="utter empty" id="b-utter">还没有话语。内核被扰动到一定程度，才会唤醒 LLM。</p>
+    </div>
+  </div>
+
+  <div data-widget="think">
+    <div class="think-head">
+      <h2>思考过程</h2>
+      <span class="think-status" id="t-status">休眠中</span>
+      <span class="end"><span class="dim" id="t-meta"></span><button type="button" id="t-wake">立即唤醒</button></span>
+    </div>
+    <div class="think-wake" data-slot="wake"></div>
+    <div id="t-episode"></div>
+    <h3 class="sub">唤醒历史 <small>点一次看那一次</small></h3>
+    <div class="history" id="t-history"></div>
+    <details class="data" data-key="think-report"><summary><b>原始报告 JSON</b><small>它实际读到的那一份</small></summary>
+      <div class="data-body"><div data-slot="report"></div></div></details>
+    <details class="data" data-key="think-all"><summary><b>全部记录</b><small>工具调用 · 记忆流</small></summary>
+      <div class="data-body"><div data-slot="tools"></div><div data-slot="memory"></div></div></details>
+  </div>
+</div>
+
+<div id="immersive" hidden>
+  <div data-slot="image"></div>
+  <div data-slot="cloud"></div>
+  <div id="expo-hud"></div>
+  <button type="button" class="exit" id="btn-exit-immerse">退出沉浸（Esc）</button>
+</div>
 
 <div id="caption" hidden>
   <span class="n" id="cap-n">1 / 12</span>
@@ -409,7 +744,7 @@ body.expo #expo-hud { display: block; }
       <button id="go-cam" type="button">开摄像头，自己试</button>
       <button id="go-sim" type="button">只用模拟观众</button>
     </div>
-    <p class="fine">画面只在你的浏览器里识别，不上传、不保存。点任一按钮后才会出声。第一次开摄像头要加载约 17 MB 的识别模型。</p>
+    <p class="fine">三个视图：展厅看它的样子，思考看 LLM 每次怎么想，全流程一层一层看数据。画面只在你的浏览器里识别，不上传、不保存。点任一按钮后才会出声。第一次开摄像头要加载约 17 MB 的识别模型。</p>
     <p class="fine err" id="start-err"></p>
   </div>
 </div>

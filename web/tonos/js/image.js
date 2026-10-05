@@ -355,3 +355,182 @@ export function drawMap(cv, people, ripples, opts = {}) {
     }
   }
 }
+
+// ———— 扰动层：观众对它的神经挑动 ————
+// 和反应-扩散的身体（它自己的状态：慢、叠加）分开画。这一层是快的、线性的、带噪波的：
+// 纤维从每个人出发，带着噪波游走到核心，动得越用力越乱；动作一起就有一束直线射向核心；
+// 核心外的同心细线在观众方向被刮开、错位。
+function vnoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const h = (a, b) => {
+    let n = Math.imul(a, 374761393) + Math.imul(b, 668265263);
+    n = Math.imul(n ^ (n >>> 13), 1274126177);
+    return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+  };
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = h(xi, yi) + (h(xi + 1, yi) - h(xi, yi)) * u;
+  const b = h(xi, yi + 1) + (h(xi + 1, yi + 1) - h(xi, yi + 1)) * u;
+  return a + (b - a) * v;
+}
+
+export class Nerves {
+  constructor(canvas) {
+    this.cv = canvas;
+    this.fibers = [];
+    this.streaks = [];
+    this.people = [];
+    this.acc = new Map();
+    this.rand = rng(29);
+    this.t = 0;
+    this.aspect = 1.6;
+  }
+
+  // 一次动作起始：一束直线从这个人射向核心
+  burst(fx, fy, strength) {
+    const n = Math.round(8 + 16 * clamp(strength));
+    for (let i = 0; i < n && this.streaks.length < 160; i++) {
+      this.streaks.push({
+        x: fx + (this.rand() - 0.5) * 0.025,
+        y: fy + (this.rand() - 0.5) * 0.025,
+        spread: (this.rand() - 0.5) * 0.5,
+        len: 0.12 + 0.3 * this.rand() * (0.5 + strength),
+        life: 0,
+        max: 0.45 + 0.4 * this.rand(),
+        w: 0.8 + 2.2 * this.rand() * strength,
+      });
+    }
+  }
+
+  spawnFiber(p) {
+    const A = this.aspect;
+    const r = this.rand;
+    let x = p.fx * A + (r() - 0.5) * 0.03;
+    let y = p.fy + (r() - 0.5) * 0.03;
+    const cx = 0.5 * A, cy = 0.5;
+    const seed = r() * 100;
+    const jit = 0.35 + 1.5 * p.e + 0.4 * p.prox;
+    const pts = [x, y];
+    for (let i = 0; i < 70; i++) {
+      const dx = cx - x, dy = cy - y;
+      if (Math.hypot(dx, dy) < 0.05 + 0.05 * r()) break;
+      const ang = Math.atan2(dy, dx) + (vnoise(x * 7 + seed, y * 7 + this.t * 0.3) - 0.5) * 2.8 * jit;
+      const step = 0.012 * (0.7 + 0.6 * r());
+      x += Math.cos(ang) * step;
+      y += Math.sin(ang) * step;
+      pts.push(x, y);
+    }
+    return { pts, life: 0, max: 0.7 + 0.9 * r() + 0.5 * p.e, w: 0.5 + 0.7 * r(), blue: r() < 0.25 };
+  }
+
+  update(dt, people) {
+    this.t += dt;
+    this.people = people;
+    for (const p of people) {
+      let acc = (this.acc.get(p.id) || 0) + (3 + 34 * p.e + 10 * p.prox) * dt;
+      while (acc >= 1) {
+        acc -= 1;
+        if (this.fibers.length < 240) this.fibers.push(this.spawnFiber(p));
+      }
+      this.acc.set(p.id, acc);
+    }
+    for (const id of [...this.acc.keys()]) if (!people.some((p) => p.id === id)) this.acc.delete(id);
+    for (const f of this.fibers) f.life += dt;
+    for (const s of this.streaks) s.life += dt;
+    this.fibers = this.fibers.filter((f) => f.life < f.max);
+    this.streaks = this.streaks.filter((s) => s.life < s.max);
+  }
+
+  draw(boundary) {
+    const cv = this.cv;
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+    }
+    const g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    this.aspect = w / h;
+    const cx = w / 2, cy = h / 2;
+    const people = this.people;
+    const dirs = people.map((p) => ({ a: Math.atan2(p.fy * h - cy, p.fx * w - cx), e: p.e, pr: p.prox }));
+
+    // 同心细线：核心的膜，被观众的方向刮开、错位
+    const R0 = (0.3 + 0.24 * boundary) * h;
+    g.lineWidth = 0.7;
+    for (let k = 0; k < 7; k++) {
+      const R = R0 * (0.55 + k * 0.085);
+      g.beginPath();
+      let pen = false;
+      for (let i = 0; i <= 220; i++) {
+        const th = (i / 220) * Math.PI * 2;
+        let push = 0, glitch = 0;
+        for (const d of dirs) {
+          const diff = Math.abs((((th - d.a) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+          const g0 = Math.exp((-diff * diff) / 0.12);
+          push += g0 * (3 + 22 * d.e + 10 * d.pr);
+          glitch += g0 * (0.3 + d.e);
+        }
+        const n = vnoise(th * 6 + k * 3.1, this.t * 0.6 + k) - 0.5;
+        const rr = R + n * (2 + push * 1.2) * (k % 2 ? 1 : -1) + Math.sin(th * 40 + this.t * 8 + k) * push * 0.15;
+        if (glitch > 0.25 && vnoise(th * 25 + k * 7, Math.floor(this.t * 12)) < glitch * 0.35) { pen = false; continue; }
+        const x = cx + Math.cos(th) * rr, y = cy + Math.sin(th) * rr;
+        if (pen) g.lineTo(x, y);
+        else g.moveTo(x, y);
+        pen = true;
+      }
+      g.strokeStyle = `rgba(231,227,217,${0.07 + 0.03 * k})`;
+      g.stroke();
+    }
+
+    // 纤维：从人出发，噪波游走到核心；先长出来，再从尾部收回
+    g.lineCap = 'round';
+    for (const f of this.fibers) {
+      const prog = f.life / f.max;
+      const n = f.pts.length / 2;
+      const end = Math.max(2, Math.floor(n * Math.min(1, prog / 0.35)));
+      const start = prog > 0.6 ? Math.floor((n * (prog - 0.6)) / 0.4) : 0;
+      if (end - start < 2) continue;
+      const alpha = 0.55 * Math.min(1, prog / 0.1) * (1 - Math.max(0, prog - 0.6) / 0.4);
+      g.beginPath();
+      for (let i = start; i < end; i++) {
+        const x = f.pts[i * 2] * h, y = f.pts[i * 2 + 1] * h;
+        if (i === start) g.moveTo(x, y);
+        else g.lineTo(x, y);
+      }
+      g.strokeStyle = f.blue ? `rgba(141,180,255,${alpha})` : `rgba(231,227,217,${alpha})`;
+      g.lineWidth = f.w;
+      g.stroke();
+    }
+
+    // 直线束：动作起始时射向核心
+    for (const s of this.streaks) {
+      const prog = s.life / s.max;
+      const x0 = s.x * w, y0 = s.y * h;
+      const ang = Math.atan2(cy - y0, cx - x0) + s.spread;
+      const L = s.len * h;
+      const a0 = Math.max(0, prog - 0.35) / 0.65, a1 = Math.min(1, prog / 0.35);
+      g.beginPath();
+      g.moveTo(x0 + Math.cos(ang) * L * a0, y0 + Math.sin(ang) * L * a0);
+      g.lineTo(x0 + Math.cos(ang) * L * a1, y0 + Math.sin(ang) * L * a1);
+      g.strokeStyle = `rgba(231,227,217,${0.85 * (1 - prog)})`;
+      g.lineWidth = s.w;
+      g.stroke();
+    }
+
+    // 噪波：动作强的人身边闪烁的短横线
+    for (const p of people) {
+      if (p.e < 0.25) continue;
+      const k = Math.round(p.e * 10);
+      for (let i = 0; i < k; i++) {
+        const x = p.fx * w + (this.rand() - 0.5) * 0.14 * h;
+        const y = p.fy * h + (this.rand() - 0.5) * 0.14 * h;
+        g.fillStyle = `rgba(231,227,217,${0.5 * this.rand()})`;
+        g.fillRect(x, y, 4 + this.rand() * 18, 0.8);
+      }
+    }
+  }
+}

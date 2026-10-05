@@ -197,6 +197,8 @@ export class Mind {
     this.lastText = '';
     this.status = '休眠中';
     this.toolLog = [];
+    this.episodes = []; // 每次唤醒一条：给「思考」视图按步骤展开
+    this.episode = null;
     this.utterReadyAt = 0;
     this.utterCooldown = 30;
     this.events = [];
@@ -255,7 +257,7 @@ export class Mind {
     const mem = this.memory.retrieve([...patterns.join('').split(/[，\s]/), ...lexTop], this.clock.real, 3).map((m) => m.text);
     return {
       time: this.clock.label(),
-      wake_reason: WAKE.find((w) => w.key === reason)?.name || reason,
+      wake_reason: WAKE.find((w) => w.key === reason)?.name || (reason === 'manual' ? '手动唤醒' : reason),
       state: {
         arousal: r2(v.arousal),
         boundary: r2(v.boundary),
@@ -285,6 +287,20 @@ export class Mind {
     this.lastReason = reason;
     const report = this.buildReport(reason);
     this.lastReport = report;
+    this.episode = {
+      n: this.wakes,
+      at: this.clock.label(),
+      reason,
+      reasonName: report.wake_reason,
+      cond: { ...this.cond },
+      report,
+      calls: [],
+      text: '',
+      by: this.engine === 'claude' && this.apiKey ? 'Claude' : '规则模拟',
+      done: false,
+    };
+    this.episodes.unshift(this.episode);
+    this.episodes.length = Math.min(this.episodes.length, 20);
     this.status = '思考中…';
     this.events.push({ type: 'wake', reason, report });
     this.version++;
@@ -301,13 +317,20 @@ export class Mind {
       this.busy = false;
       this.cooldown = 25;
       this.status = this.enabled ? '休眠中' : '认知层关闭';
+      if (this.episode) {
+        this.episode.text = this.lastText;
+        this.episode.done = true;
+        this.episode = null;
+      }
       this.events.push({ type: 'done' });
       this.version++;
     }
   }
 
   log(entry) {
-    this.toolLog.unshift({ at: this.clock.label(), by: this.engine === 'claude' && this.apiKey ? 'Claude' : '模拟', ...entry });
+    const e = { at: this.clock.label(), by: this.engine === 'claude' && this.apiKey ? 'Claude' : '模拟', ...entry };
+    this.toolLog.unshift(e);
+    if (this.busy && this.episode) this.episode.calls.push(e);
     this.toolLog.length = Math.min(this.toolLog.length, 40);
     this.version++;
   }

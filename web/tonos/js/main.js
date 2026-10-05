@@ -8,7 +8,7 @@ import { Kernel, MODES } from './kernel.js';
 import { Lexicon } from './lexicon.js';
 import { Memory, Mind } from './mind.js';
 import { Sound } from './sound.js';
-import { Body, drawMap } from './image.js';
+import { Body, Nerves, drawMap } from './image.js';
 import { UI, MODE_VAR } from './ui.js';
 import { Demo } from './demo.js';
 import { safeStorage } from './util.js';
@@ -29,6 +29,7 @@ const app = {
   memory: new Memory(),
   sound: new Sound(),
   body: new Body($('body-cv')),
+  nerves: new Nerves($('nerve-cv')),
   calib: 'desk',
   tracks: [],
   klog: [],
@@ -111,12 +112,18 @@ if (!app.body.ok) {
 // ———— 事件分发 ————
 function onFeatureEvent(e) {
   switch (e.type) {
-    case 'arrive':
+    case 'arrive': {
       app.sound.onArrive(e.x);
+      const st = app.features.per.get(e.id);
+      if (st) app.nerves.burst(st.fx, st.fy, 0.3);
       break;
-    case 'onset':
+    }
+    case 'onset': {
       app.sound.onOnset(e, app.kernel.v.arousal);
+      const st = app.features.per.get(e.id);
+      if (st) app.nerves.burst(st.fx, st.fy, e.strength);
       break;
+    }
     case 'summary':
       e.summary.label = app.clock.label();
       app.mind.addImportance(e.summary.items.reduce((s, i) => s + i.imp, 0));
@@ -170,7 +177,9 @@ function frame(ts) {
       mode: a.kernel.mode, v: a.kernel.v, seed: a.kernel.seed, sediment: a.kernel.v.sediment,
       people: a.features.list, ripples,
     });
-    drawMap($('map-cv'), a.features.list, ripples, { labels: !document.body.classList.contains('expo') });
+    a.nerves.update(dt, a.features.list);
+    a.nerves.draw(a.body.lag.boundary);
+    drawMap($('map-cv'), a.features.list, ripples, { labels: !a.ui.immersive });
 
     a.ui.frame(dt);
     a.demo.update(dt);
@@ -231,8 +240,8 @@ function hideStart() {
 }
 
 $('go-demo').addEventListener('click', () => { startAudio(); hideStart(); app.demo.start(); });
-$('go-cam').addEventListener('click', () => { startAudio(); hideStart(); startCam(); });
-$('go-sim').addEventListener('click', () => { startAudio(); hideStart(); app.crowd.scenario('approach'); });
+$('go-cam').addEventListener('click', () => { startAudio(); hideStart(); app.ui.setView('hall'); startCam(); });
+$('go-sim').addEventListener('click', () => { startAudio(); hideStart(); app.ui.setView('hall'); app.crowd.scenario('approach'); });
 
 $('btn-cam').addEventListener('click', () => {
   startAudio();
@@ -243,12 +252,34 @@ $('btn-cam').addEventListener('click', () => {
   } else startCam();
 });
 $('calib').addEventListener('change', (e) => { app.calib = e.target.value; });
+// 模拟观众：顶栏的下拉菜单
+function setMenu(open) {
+  $('scenarios').hidden = !open;
+  $('btn-sim').setAttribute('aria-expanded', String(open));
+}
+$('btn-sim').addEventListener('click', (e) => {
+  e.stopPropagation();
+  setMenu($('scenarios').hidden);
+});
 $('scenarios').addEventListener('click', (e) => {
   const b = e.target.closest('[data-scenario]');
   if (!b) return;
   startAudio();
   app.crowd.scenario(b.dataset.scenario);
+  setMenu(false);
 });
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.menu')) setMenu(false);
+});
+
+// 控制抽屉
+function setDrawer(open) {
+  $('drawer').hidden = !open;
+  $('btn-ctl').setAttribute('aria-expanded', String(open));
+  $('btn-ctl').classList.toggle('on', open);
+}
+$('btn-ctl').addEventListener('click', () => setDrawer($('drawer').hidden));
+$('drawer-close').addEventListener('click', () => setDrawer(false));
 $('btn-speed').addEventListener('click', () => app.setSpeed(app.clock.speed > 1 ? 1 : 60));
 $('btn-close').addEventListener('click', () => app.closeDay());
 $('btn-mind').addEventListener('click', () => {
@@ -272,9 +303,12 @@ $('model').addEventListener('change', (e) => {
   app.mind.model = e.target.value;
   try { if (store) store.setItem(MODEL_KEY, app.mind.model); } catch { /* 忽略 */ }
 });
-$('btn-wake').addEventListener('click', () => {
-  if (!app.mind.forceWake('reflect')) app.log(app.mind.enabled ? 'LLM 正在思考，等这次结束' : '认知层已关闭，没有唤醒', 'var(--warn)');
-});
+function wakeNow() {
+  if (!app.mind.forceWake('manual')) app.log(app.mind.enabled ? 'LLM 正在思考，等这次结束' : '认知层已关闭，没有唤醒', 'var(--warn)');
+  else app.ui.epSel = null;
+}
+$('btn-wake').addEventListener('click', wakeNow);
+$('t-wake').addEventListener('click', wakeNow);
 $('btn-sound').addEventListener('click', async () => {
   if (!app.sound.ctx) { await startAudio(); return; }
   const muted = app.sound.on;
@@ -301,17 +335,18 @@ $('btn-reset').addEventListener('click', () => {
   setTimeout(() => { $('btn-reset').textContent = '重置展期'; }, 4000);
 });
 
-function setView(v) {
-  document.body.classList.toggle('expo', v === 'expo');
-  $('v-flow').classList.toggle('on', v !== 'expo');
-  $('v-expo').classList.toggle('on', v === 'expo');
-}
-$('v-flow').addEventListener('click', () => setView('flow'));
-$('v-expo').addEventListener('click', () => setView('expo'));
+// 快捷键：1 展厅 · 2 思考 · 3 全流程 · F 沉浸投影 · Esc 退出
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea')) return;
-  if (e.key === 'v' || e.key === 'V') setView(document.body.classList.contains('expo') ? 'flow' : 'expo');
-  if (e.key === 'Escape') { app.demo.stop(); setView('flow'); }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const views = { 1: 'hall', 2: 'think', 3: 'flow' };
+  if (views[e.key]) { app.ui.setImmersive(false); app.ui.setView(views[e.key]); }
+  if (e.key === 'f' || e.key === 'F') app.ui.setImmersive(!app.ui.immersive);
+  if (e.key === 'Escape') {
+    if (app.ui.immersive) app.ui.setImmersive(false);
+    else if (!$('drawer').hidden) setDrawer(false);
+    else app.demo.stop();
+  }
 });
 
 // 便于在控制台里调试

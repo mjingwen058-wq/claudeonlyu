@@ -115,3 +115,18 @@ test('set_mode_bias 只改权重并限制在 ±0.5；write_memory 重要性 1–
   mind.execTool('write_memory', { text: '测试', importance: 42 });
   assert.equal(memory.items[0].importance, 10);
 });
+
+test('一次唤醒记录成一条思考过程，包含它的工具调用', async () => {
+  const { mind } = makeMind();
+  await mind.wake('reflect');
+  assert.equal(mind.episodes.length, 1);
+  const ep = mind.episodes[0];
+  assert.equal(ep.done, true);
+  assert.equal(ep.reasonName, '定时反思');
+  assert.ok(ep.report && ep.report.state);
+  assert.ok(ep.calls.length >= 1, '至少写一条记忆');
+  assert.ok(ep.calls.some((c) => c.name === 'write_memory'));
+  // 唤醒之外的工具调用不记进这一次
+  mind.execTool('set_mode_bias', { mode: 'explore', bias: 0.1 });
+  assert.ok(!ep.calls.some((c) => c.name === 'set_mode_bias'));
+});
