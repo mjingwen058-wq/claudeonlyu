@@ -8,6 +8,27 @@
 
 做法和 SCAA 问卷一样：Next.js + Neon 数据库，部署到 Cloudflare。不用买服务器，不用备案，免费额度够用。
 
+## 先在自己电脑上试用（Windows）
+
+不用注册数据库，也不用部署。试用的签到数据只存在你电脑上。
+
+1. **装 Node.js**（只装一次）：打开 <https://nodejs.org/>，下载 **LTS** 版本的 Windows 安装包（`.msi`），一路点「下一步」装完。官网慢的话用国内镜像 <https://npmmirror.com/mirrors/node/>，进 `v20` 开头的最新文件夹，下载 `node-v20.xx.x-x64.msi`。
+2. **解压代码**：把 `vinci-checkin` 文件夹解压到桌面之类的地方（路径里最好不要有中文）。
+3. **双击 `start-local.bat`**：
+   - 第一次会自动安装依赖，要几分钟，窗口里滚很多字是正常的
+   - 之后会构建一次，大约一分钟，然后浏览器自动打开签到页
+   - 如果 Windows 防火墙弹窗问要不要允许 Node.js 访问网络，点「允许」（手机要连进来）
+4. **试用**：
+   - 观众端：<http://localhost:3000>
+   - 后台：<http://localhost:3000/admin>，密码 `vinci2026`
+   - 用手机试：手机连**同一个 Wi-Fi**，打开黑色窗口里印出来的 `http://192.168.x.x:3000`
+5. **停止**：关掉那个黑色窗口。下次再双击 `start-local.bat` 就行，之前的试用数据还在。
+6. **清空试用数据**：关掉窗口，删掉 `vinci-checkin` 里的 `.local-data` 文件夹。
+
+> 本地试用只是看效果。观众真正扫码签到要部署到网上（下面的步骤），因为观众的手机连不到你的电脑。
+
+想在本地连上真正的 Neon 数据库试：在 `vinci-checkin` 里新建 `.env.local`，写上 `DATABASE_URL=...` 和 `ADMIN_PASSWORD=...`，然后在这个文件夹打开终端运行 `npm run build`，再运行 `npm start`。
+
 ## 上线步骤（大约 15 分钟，全程在网页上点）
 
 ### 1. 建数据库（Neon）
@@ -63,12 +84,11 @@
 
 ```bash
 npm install
+npm run local          # 本地试用，不用数据库（Windows 上等于双击 start-local.bat）
 npm run typecheck      # 类型检查
 npm run test:db        # 用内存数据库跑一遍签到逻辑（不用联网）
 npm run build
 ```
-
-想在本地完整跑起来：复制 `.env.example` 为 `.env.local`，填上真实的 Neon 连接串和密码，然后 `npm run dev`，打开 <http://localhost:3000>。
 
 ## 目录
 
@@ -87,5 +107,6 @@ lib/
   csv.ts                    导出格式
   time.ts                   北京时间
 public/assets/              从 KV 裁出来的标题字、标志、主视觉
-scripts/                    本地测试用的内存数据库，线上不用
+scripts/                    本地试用和测试用的数据库，线上不用
+start-local.bat             Windows 上双击就能本地试用
 ```

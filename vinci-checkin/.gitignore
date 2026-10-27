@@ -10,3 +10,4 @@ next-env.d.ts
 .dev.vars
 .test-build
 *.tsbuildinfo
+.local-data

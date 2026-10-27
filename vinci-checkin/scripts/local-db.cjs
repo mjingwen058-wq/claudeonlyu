@@ -1,12 +1,16 @@
-// 只给本地测试用，线上不会加载。
-// 用法：NODE_OPTIONS="--require ./scripts/local-db.cjs" DATABASE_URL="postgresql://local:local@localhost/vinci" npm start
-// 作用：把 Neon 驱动发出的 HTTP 查询交给进程内的 PGlite（内存里的 Postgres），不用联网、不用真的数据库。
+// 只在自己电脑上试用和测试时加载，线上不会用到。
+// 作用：把 Neon 驱动发出的 HTTP 查询交给进程内的 PGlite（本地的 Postgres），不用联网、不用真的数据库。
+// 设了 VINCI_LOCAL_DATA 时数据存在那个文件夹里（关掉再开还在）；没设时只存在内存里（测试用）。
+
+const fs = require("node:fs");
 
 let dbPromise;
 function db() {
   if (!dbPromise) {
     dbPromise = import("@electric-sql/pglite").then(async ({ PGlite }) => {
-      const pg = new PGlite();
+      const dir = process.env.VINCI_LOCAL_DATA;
+      if (dir) fs.mkdirSync(dir, { recursive: true });
+      const pg = dir ? new PGlite(dir) : new PGlite();
       await pg.waitReady;
       return pg;
     });

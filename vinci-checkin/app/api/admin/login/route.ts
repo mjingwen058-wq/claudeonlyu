@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
   res.cookies.set(ADMIN_COOKIE_NAME, createSessionToken(), {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // 线上是 https；在自己电脑上用手机通过 http://192.168.x.x 打开时不能要求 https，否则登不进去
+    secure: req.nextUrl.protocol === "https:",
     path: "/",
     maxAge: SESSION_MAX_AGE,
   });

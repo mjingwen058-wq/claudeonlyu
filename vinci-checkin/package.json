@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "local": "next build && node scripts/local.mjs",
     "typecheck": "tsc --noEmit",
     "test:db": "node scripts/test-store.mjs",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
