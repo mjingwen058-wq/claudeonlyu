@@ -6,6 +6,8 @@
 - 浏览器原型：[`web/`](web/)（Three.js + Web Audio，不用联网，three.js 已经放在 `web/vendor/`）
 - TouchDesigner 版：[`td/`](td/)（一键搭建脚本和一步步测试说明，见 [`td/README.md`](td/README.md)）
 
+> 另外：[`checkin/`](checkin/) 是 VINCI 2026「无界未来」展览的扫码签到交互原型，和 Sonic Field 无关。
+
 ## 在线打开（可以用麦克风）
 
 - GitHub Pages：<https://mjingwen058-wq.github.io/claudeonlyu/>

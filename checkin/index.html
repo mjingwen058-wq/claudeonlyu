@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>/* 单独打开这个文件时用的基础重置；发布成 Artifact 时外壳自带同样的规则 */
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<!-- ARTIFACT-START -->
+<title>VINCI 2026 观众签到</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Montserrat:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  /* 布局：照 KV 的白纸 + 点线参考线。观众端是手机竖屏，一屏一题；后台是 指标 → 时段图 → 观众构成 → 签到明细 */
+  --paper:#FFFFFF;
+  --ink:#141414;
+  --ink-2:#474747;
+  --muted:#8A8A8A;
+  --rule:#CFCFCF;
+  --line:#E6E6E6;
+  --wash:#F5F5F3;
+  --on-ink:#FFFFFF;
+  --red:#C9463A;
+  --orange:#EE861C;
+  --yellow:#F2CB2B;
+  --green:#4B9634;
+  --blue:#3DAEE0;
+  --danger:#C23A2B;
+  --sq-red:linear-gradient(135deg,#E06A57,#A82B22);
+  --sq-orange:linear-gradient(135deg,#F9B023,#E5571A);
+  --sq-yellow:linear-gradient(135deg,#FAEB8E,#F0C11C);
+  --sq-green:linear-gradient(135deg,#A6CE3E,#2A6B2E);
+  --sans:"Montserrat","PingFang SC","HarmonyOS Sans SC","MiSans","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.sq{display:inline-block;width:10px;height:10px;flex:none}
+.sq-red{background:var(--sq-red)}
+.sq-orange{background:var(--sq-orange)}
+.sq-yellow{background:var(--sq-yellow)}
+.sq-green{background:var(--sq-green)}
+.strip{flex:none;height:18px;background:url("assets/kv-strip.png") repeat-x left bottom/auto 100%}
+
+/* ---------- 原型栏（不属于正式页面） ---------- */
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:20;background:var(--ink)}
+.proto-bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:19;background:var(--ink);color:var(--on-ink)}
+.proto-in{max-width:1240px;margin:0 auto;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px}
+.proto-name{margin-right:auto;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;font-size:13px;font-weight:600;min-width:0}
+.proto-name small{font-family:var(--mono);font-weight:400;font-size:11px;opacity:.65}
+.pseg{display:inline-flex;border:1px solid rgba(255,255,255,.3);border-radius:999px;padding:2px}
+.pseg button{background:none;border:0;color:rgba(255,255,255,.72);font-size:13px;padding:5px 14px;border-radius:999px;cursor:pointer}
+.pseg button[aria-pressed="true"]{background:var(--on-ink);color:var(--ink);font-weight:600}
+.proto-reset{background:none;border:1px solid rgba(255,255,255,.3);color:var(--on-ink);border-radius:999px;font-size:12px;padding:5px 12px;cursor:pointer}
+.proto-reset.armed{border-color:var(--orange);color:var(--yellow)}
+@media (max-width:560px){.pseg{order:3;width:100%}.pseg button{flex:1}.proto-name small{display:none}}
+
+.page{max-width:1240px;margin:0 auto;padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* ---------- 观众端：手机框 + 说明 ---------- */
+.visitor{display:grid;grid-template-columns:400px minmax(0,290px);gap:48px;justify-content:center;align-items:start}
+.phone{position:relative;width:100%;height:min(820px,calc(100vh - 110px));min-height:640px;border:10px solid var(--ink);border-radius:46px;overflow:hidden;background:var(--paper);box-shadow:0 30px 60px -32px rgba(0,0,0,.45)}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column}
+.notes{display:grid;gap:28px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 72px)}
+.note{display:grid;gap:12px;padding-top:12px;border-top:1px dotted var(--rule)}
+.note h2{margin:0;font-size:14px;display:flex;align-items:center;gap:8px}
+.flow{list-style:none;margin:0;padding:0;display:grid;gap:2px;counter-reset:f}
+.flow li{counter-increment:f;display:grid;grid-template-columns:26px 1fr;gap:6px;padding:7px 8px;font-size:13px;color:var(--ink-2)}
+.flow li::before{content:counter(f,decimal-leading-zero);font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:2px}
+.flow li[aria-current="step"]{background:var(--ink);color:var(--on-ink)}
+.flow li[aria-current="step"]::before{color:var(--yellow)}
+.note-sm{margin:0;font-size:12px;color:var(--muted);line-height:1.6}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--ink-2);cursor:pointer}
+.check input{width:17px;height:17px;margin:2px 0 0;accent-color:var(--ink);flex:none}
+@media (max-width:860px){
+  .visitor{grid-template-columns:minmax(0,1fr);gap:28px}
+  .phone{max-width:420px;margin:0 auto}
+  .notes{position:static;max-width:420px;margin:0 auto;width:100%}
+}
+@media (max-width:480px){
+  .page{padding-block:12px 32px}
+  .phone{border:1px solid var(--line);border-radius:4px;box-shadow:none;height:calc(100vh - 104px);height:calc(100dvh - 104px);min-height:560px}
+}
+
+/* 手机屏内部 */
+.v{flex:1;min-height:0;display:flex;flex-direction:column}
+.v-scroll{flex:1;min-height:0;overflow-y:auto;padding:22px 24px 18px;display:flex;flex-direction:column;gap:18px}
+.v-foot{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 24px 20px;border-top:1px dotted var(--rule)}
+.btn-next{border:0;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:13px 28px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .15s}
+.btn-next:disabled{opacity:.22;cursor:not-allowed}
+.btn-wide{width:100%}
+.btn-ghost{border:0;background:none;color:var(--ink-2);padding:13px 4px;font-size:14px;cursor:pointer}
+.btn-line{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--ink);background:var(--paper);color:var(--ink);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.v-toast{position:absolute;left:24px;right:24px;bottom:84px;background:var(--ink);color:var(--on-ink);font-size:13px;padding:10px 14px;text-align:center}
+
+/* 欢迎页 */
+.w-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.w-logo{height:22px;width:auto}
+.w-gallery{display:grid;justify-items:end;gap:2px;text-align:right;font-size:10px;letter-spacing:.06em;line-height:1.25}
+.w-gallery b{font-size:13px;letter-spacing:.14em;font-weight:600}
+.w-tri{width:84px;height:2px;background:linear-gradient(90deg,var(--red) 0 25%,var(--orange) 25% 50%,var(--yellow) 50% 75%,var(--green) 75%)}
+.w-title{display:grid;gap:10px;padding-block:14px;border-top:1px dotted var(--rule);border-bottom:1px dotted var(--rule)}
+.w-cn{width:74%;height:auto}
+.w-en{width:100%;height:auto}
+.w-sub{margin:0;font-size:12px;line-height:1.45;color:var(--ink-2);font-weight:500}
+.w-art{display:block;width:calc(100% + 48px);max-width:none;height:auto;margin-inline:-24px}
+.w-meta{margin:0;display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px;letter-spacing:.02em}
+.w-intro{margin:0;font-size:14px;color:var(--ink-2)}
+
+/* 一屏一题 */
+.q-top{flex:none;padding:20px 24px 0}
+.q-progress{display:flex;gap:5px}
+.q-progress i{flex:1;height:3px;background:var(--line)}
+.q-progress i.on{background:var(--ink)}
+.q-num{margin:6px 0 0;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.q-title{margin:-6px 0 0;font-size:26px;line-height:1.3;font-weight:700;text-wrap:balance}
+.q-hint{margin:-10px 0 0;font-size:13px;color:var(--muted)}
+.field-input{width:100%;border:0;border-bottom:1.5px solid var(--ink);border-radius:0;background:transparent;color:var(--ink);font-family:var(--sans);font-size:22px;padding:10px 2px;outline:none}
+.field-input::placeholder{color:#B8B8B8}
+.field-input:focus{border-bottom-color:var(--orange);box-shadow:0 1.5px 0 var(--orange)}
+.field-err{margin:-8px 0 0;font-size:13px;color:var(--danger)}
+.opts{display:grid;gap:10px}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:50px;text-align:left;padding:13px 16px;border:1px solid var(--ink);border-radius:2px;background:var(--paper);font-size:15px;cursor:pointer;transition:background .12s}
+.opt .box{width:14px;height:14px;border:1.5px solid var(--ink);flex:none}
+.opt[aria-checked="true"]{background:var(--ink);color:var(--on-ink);font-weight:600}
+.opt[aria-checked="true"] .box{border-color:var(--on-ink);background:var(--sq-yellow)}
+.consent{display:grid;gap:10px;padding-top:14px;border-top:1px dotted var(--rule)}
+.link{border:0;background:none;padding:0 0 0 4px;color:var(--ink);text-decoration:underline;text-underline-offset:3px;font-size:13px;cursor:pointer}
+.privacy{font-size:12px;line-height:1.7;color:var(--ink-2);background:var(--wash);padding:10px 12px}
+.privacy p{margin:0}
+.ph{border-bottom:1px dashed var(--muted);color:var(--muted)}
+.alert{font-size:13px;line-height:1.6;color:var(--danger);border-left:3px solid var(--danger);padding:8px 12px;background:var(--wash)}
+
+/* 签到成功 */
+.done-top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.chip{display:inline-flex;align-items:center;padding:4px 12px;background:var(--ink);color:var(--on-ink);font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.05em;border-radius:12px 12px 0 12px}
+.done-code{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.done-note{margin:-4px 0 0;font-size:13px;color:var(--ink-2)}
+.done-seq{display:flex;align-items:baseline;gap:10px;font-size:15px;font-weight:600;padding-bottom:6px;border-bottom:1px dotted var(--rule)}
+.done-seq b{font-size:72px;line-height:1;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ascii{margin:0;font-family:var(--mono);font-size:9.5px;line-height:1.08;letter-spacing:0;white-space:pre;overflow:hidden;user-select:none}
+.ascii .f{color:#C9C9C9}
+.ascii .t{color:var(--tint)}
+.ascii .k{color:var(--ink)}
+.ticket{margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.ticket div{display:grid;gap:2px;min-width:0}
+.ticket dt{font-size:11px;color:var(--muted)}
+.ticket dd{margin:0;font-size:15px;font-weight:600;overflow-wrap:anywhere}
+.live{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--ink)}
+.live .clock{font-size:26px;font-weight:600;letter-spacing:.02em}
+.live-label{margin-left:auto;font-size:12px;color:var(--muted)}
+.blink{animation:blink 1s steps(2,start) infinite}
+@keyframes blink{to{visibility:hidden}}
+.done-hint{margin:0;font-size:13px;color:var(--ink-2)}
+
+/* ---------- 后台 ---------- */
+.login{max-width:380px;margin:48px auto;display:grid;gap:16px}
+.login-logo{height:28px;width:auto}
+.login h1{margin:8px 0 0;font-size:30px;line-height:1.2}
+.login p{margin:0}
+.login form{display:grid;gap:14px;padding-top:16px;border-top:1px dotted var(--rule)}
+.lbl{font-size:13px;color:var(--ink-2)}
+.pw{display:flex;align-items:flex-end;gap:8px}
+.pw .btn-ghost{padding:10px 4px;font-size:13px}
+.login-hint{font-size:12px;color:var(--muted)}
+.login-hint code{font-family:var(--mono);color:var(--ink);background:var(--wash);padding:1px 6px}
+
+.admin{display:grid;grid-template-columns:minmax(0,1fr);gap:26px}
+.a-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px 20px;padding-bottom:16px;border-bottom:1px dotted var(--rule)}
+.a-brand{display:flex;align-items:center;gap:16px;min-width:0}
+.a-logo{height:26px;width:auto}
+.a-brand h1{margin:0;font-size:22px;line-height:1.2}
+.a-brand p{margin:2px 0 0;font-size:12px}
+.a-actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn-line .dot{width:8px;height:8px;border-radius:50%;background:var(--rule)}
+.btn-line[aria-pressed="true"] .dot{background:var(--green);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+.days{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
+.day{flex:none;display:grid;justify-items:center;gap:1px;min-width:54px;padding:7px 8px;border:1px solid var(--line);background:var(--paper);cursor:pointer}
+.day b{font-family:var(--mono);font-size:13px;font-weight:600}
+.day small{font-size:11px;color:var(--muted)}
+.day[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--on-ink)}
+.day[aria-pressed="true"] small{color:var(--yellow)}
+.day:disabled{cursor:not-allowed;opacity:.38}
+.day-all{min-width:72px;border-color:var(--ink)}
+
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}
+.kpi{display:grid;gap:4px;align-content:start;padding-top:12px;border-top:2px solid var(--ink);min-width:0}
+.k-label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}
+.k-val{font-size:38px;line-height:1.1;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.k-sub{font-size:12px;color:var(--muted)}
+.delta{font-weight:700}
+.delta.up{color:var(--green)}
+.delta.down{color:var(--danger)}
+@media (max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.sec{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-width:0}
+.sec-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:8px 16px;padding-bottom:8px;border-bottom:1px dotted var(--rule)}
+.sec-head h2{margin:0;font-size:16px;display:flex;align-items:center;gap:8px}
+.sec-head p{margin:0;font-size:12px;color:var(--muted)}
+.chart{width:100%;min-height:220px}
+.chart svg{display:block;max-width:100%}
+.c-bar{fill:var(--ink)}
+.c-bar.hi{fill:var(--orange)}
+.c-future{fill:none;stroke:var(--rule);stroke-dasharray:2 3}
+.c-base{stroke:var(--ink);stroke-width:1}
+.c-ax{fill:var(--muted);font-family:var(--mono);font-size:11px}
+.c-ax.hi{fill:var(--ink);font-weight:600}
+.c-val{fill:var(--ink);font-family:var(--mono);font-size:11px}
+.c-val.hi{font-weight:600}
+
+.mix{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px}
+@media (max-width:1100px){.mix{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:620px){.mix{grid-template-columns:minmax(0,1fr)}}
+.mix-panel{display:grid;gap:10px;align-content:start;min-width:0}
+.mix-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.mix-head h3{margin:0;font-size:14px}
+.mix-head span{font-size:12px;color:var(--muted)}
+.rows{display:grid;gap:8px}
+.row{display:grid;grid-template-columns:minmax(0,7.2em) minmax(0,1fr) 3em 2.4em;align-items:center;gap:8px;font-size:13px}
+.row .lbl{color:var(--ink);overflow-wrap:anywhere;line-height:1.3;font-size:13px}
+.track{height:8px;background:var(--wash)}
+.fill{display:block;height:100%;background:var(--ink)}
+.fill.top{background:var(--orange)}
+.pct{text-align:right;font-family:var(--mono);font-weight:600;font-variant-numeric:tabular-nums}
+.cnt{text-align:right;font-family:var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+
+.tbl-tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.search{flex:1 1 220px;max-width:320px;border:1px solid var(--ink);border-radius:0;background:var(--paper);padding:8px 12px;font:inherit;font-size:14px;color:var(--ink)}
+.tbl-wrap{position:relative;overflow-x:auto;border-top:2px solid var(--ink)}
+table{width:100%;min-width:820px;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;font-weight:600;color:var(--muted)}
+tr.is-live td{background:#FFF8E1}
+.tag{display:inline-block;margin-left:6px;font-size:11px;padding:0 6px;background:var(--sq-yellow);color:var(--ink);font-weight:600}
+.del{border:0;background:none;color:var(--muted);font-size:12px;cursor:pointer;padding:2px 4px}
+.del:hover{color:var(--danger)}
+.del.armed{color:var(--on-ink);background:var(--danger)}
+.more{justify-self:start}
+.empty{padding:28px 0;text-align:center;color:var(--muted)}
+.export{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;padding:14px;background:var(--wash)}
+.export textarea{width:100%;font-family:var(--mono);font-size:12px;line-height:1.5;border:1px solid var(--line);padding:10px;resize:vertical;background:var(--paper);color:var(--ink)}
+.export-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.foot-note{margin:0;font-size:12px;color:var(--muted);line-height:1.7}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:30;background:var(--ink);color:var(--on-ink);font-size:13px;padding:10px 16px;max-width:calc(100% - 32px)}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+}
+</style>
+
+<header class="proto-bar">
+  <div class="proto-in">
+    <div class="proto-name">VINCI 2026 观众签到 · 交互原型 <small>演示时间从 11月3日 周二 15:30 开始走</small></div>
+    <div class="pseg" role="group" aria-label="切换页面">
+      <button type="button" id="tab-visitor" data-view="visitor" aria-pressed="true">观众端</button>
+      <button type="button" id="tab-admin" data-view="admin" aria-pressed="false">后台</button>
+    </div>
+    <button type="button" class="proto-reset" id="reset-demo">重置演示数据</button>
+  </div>
+</header>
+
+<main class="page">
+  <section class="visitor" id="view-visitor" aria-label="观众端">
+    <div class="phone"><div class="screen" id="screen"></div></div>
+    <aside class="notes">
+      <section class="note">
+        <h2><span class="sq sq-red" aria-hidden="true"></span>观众端流程</h2>
+        <ol class="flow" id="flow">
+          <li data-k="scan">前台扫码，微信或手机相机都能打开</li>
+          <li data-k="welcome">欢迎页：展览信息 + 开始签到</li>
+          <li data-k="q">6 个问题，一屏一题</li>
+          <li data-k="done">入场凭证：第几位观众 + 走动的时钟</li>
+        </ol>
+        <p class="note-sm">同一个手机号一天只记一次。重复扫码或者重复提交，会直接显示原来的凭证。</p>
+      </section>
+      <section class="note">
+        <h2><span class="sq sq-yellow" aria-hidden="true"></span>原型控制</h2>
+        <label class="check"><input type="checkbox" id="fail-next"><span>下次提交模拟网络失败</span></label>
+        <button type="button" class="btn-line" id="again">换一位观众重新签到</button>
+        <p class="note-sm">你在这里提交的签到会马上出现在「后台」里。演示数据只存在这台设备的浏览器里。</p>
+      </section>
+    </aside>
+  </section>
+
+  <section id="view-admin" aria-label="后台" hidden></section>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = (n, w = 2) => String(n).padStart(w, '0');
+
+/* ---------- 展览设定（原型用） ---------- */
+const OPEN_H = 10, CLOSE_H = 18;                 // 开馆 10:00，闭馆 18:00
+const PASSWORD = 'vinci2026';                    // 演示密码；正式版在服务器校验
+const MAX_TRIES = 5, LOCK_MS = 30000;
+const WEEK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+const EXPO = Array.from({ length: 15 }, (_, i) => `2026-11-${pad(i + 1)}`);
+const TODAY = '2026-11-03';
+const OPEN_DAYS = EXPO.filter(d => d <= TODAY);
+const SIM_START = new Date(2026, 10, 3, 15, 30, 0).getTime();
+const LOADED = Date.now();
+const now = () => SIM_START + (Date.now() - LOADED);   // 演示时钟
+
+const STEPS = [
+  { id: 'name', title: '你的名字', hint: '会显示在入场凭证上', type: 'text', placeholder: '姓名' },
+  { id: 'phone', title: '手机号', hint: '用来确认今天是否已经签到，不会公开', type: 'tel', placeholder: '11 位手机号' },
+  { id: 'gender', label: '性别', title: '性别', type: 'radio', options: ['男', '女', '不便透露'] },
+  { id: 'age', label: '年龄段', title: '年龄段', type: 'radio', options: ['18 岁以下', '18–25 岁', '26–35 岁', '36–45 岁', '46 岁及以上'], short: ['18 岁以下', '18–25', '26–35', '36–45', '46 岁及以上'] },
+  { id: 'role', label: '身份', title: '你的身份', type: 'radio', options: ['学生', '艺术 / 设计从业者', '科技 / 互联网从业者', '教师 / 研究者', '其他'], short: ['学生', '艺术/设计', '科技/互联网', '教师/研究者', '其他'] },
+  { id: 'channel', label: '获知渠道', title: '你是怎么知道这个展览的？', type: 'radio', options: ['小红书', '微信公众号 / 朋友圈', '抖音 / 视频号', '朋友推荐', '学校 / 单位组织', '路过', '其他'], short: ['小红书', '公众号/朋友圈', '抖音/视频号', '朋友推荐', '学校/单位', '路过', '其他'] },
+];
+const stepOf = id => STEPS.find(s => s.id === id);
+const optLabel = (id, i) => { const s = stepOf(id); return (s.short || s.options)[i] ?? ''; };
+const WEIGHTS = { gender: [42, 55, 3], age: [5, 42, 31, 13, 9], role: [45, 20, 15, 8, 12], channel: [28, 24, 10, 16, 12, 6, 4] };
+const HOUR_W = [6, 9, 11, 14, 15, 13, 10, 6];        // 10 点到 17 点
+const MARKS = ['red', 'orange', 'yellow', 'green'];
+
+/* ---------- 存储：读写失败时退回内存，流程照样能走 ---------- */
+const LS_REC = 'vinci-checkin-records', LS_DEV = 'vinci-checkin-device', LS_DEL = 'vinci-checkin-deleted';
+const SS_AUTH = 'vinci-admin', SS_LOCK = 'vinci-admin-lock';
+const mem = {};
+function area(kind) { try { return kind === 's' ? window.sessionStorage : window.localStorage; } catch (e) { return null; } }
+function sget(key, fb, kind) {
+  const k = kind + key;
+  if (!(k in mem)) { let raw = null; try { const a = area(kind); raw = a ? a.getItem(key) : null; } catch (e) {} mem[k] = raw; }
+  try { return mem[k] == null ? fb : JSON.parse(mem[k]); } catch (e) { return fb; }
+}
+function sset(key, val, kind) { const raw = JSON.stringify(val); mem[kind + key] = raw; try { const a = area(kind); if (a) a.setItem(key, raw); } catch (e) {} }
+function sdel(key, kind) { mem[kind + key] = null; try { const a = area(kind); if (a) a.removeItem(key); } catch (e) {} }
+
+/* ---------- 日期 ---------- */
+const atTime = (key, h, m = 0, s = 0) => { const [y, mo, d] = key.split('-').map(Number); return new Date(y, mo - 1, d, h, m, s).getTime(); };
+const dow = key => new Date(atTime(key, 12)).getDay();
+const md = key => `${+key.slice(5, 7)}/${+key.slice(8)}`;
+const cnDate = key => `${+key.slice(5, 7)}月${+key.slice(8)}日 ${WEEK[dow(key)]}`;
+const hm = ts => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const hms = ts => `${hm(ts)}:${pad(new Date(ts).getSeconds())}`;
+const code = r => `V${r.day.slice(5).replace('-', '')}-${pad(r.seq, 4)}`;
+const maskPhone = p => /^\d{11}$/.test(p) ? `${p.slice(0, 3)}****${p.slice(7)}` : p;
+
+/* ---------- 演示数据：按日期播种，每次打开都一样 ---------- */
+function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hash(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function pickW(r, w) { const tot = w.reduce((a, b) => a + b, 0); let x = r() * tot; for (let i = 0; i < w.length; i++) { x -= w[i]; if (x < 0) return i; } return w.length - 1; }
+const SURN = '王李张刘陈杨黄赵吴周徐孙马朱胡郭何林罗高郑梁谢宋唐许韩冯邓曹'.split('');
+const GIVEN = '思雨子欣宇涵浩然佳怡晨阳一诺嘉文博俊若琳晓明泽可心逸安悦天杰'.split('');
+const mockCache = {};
+function mockDay(key) {
+  if (mockCache[key]) return mockCache[key];
+  const r = rng(hash(key));
+  const weekend = dow(key) === 0 || dow(key) === 6;
+  const base = key === EXPO[0] ? 330 : weekend ? 280 : 175;
+  const total = Math.round(base + (r() - 0.5) * 40);
+  const until = key === TODAY ? SIM_START : Infinity;
+  const pick = arr => arr[Math.floor(r() * arr.length)];
+  const out = [];
+  for (let i = 0; i < total; i++) {
+    const ts = atTime(key, OPEN_H + pickW(r, HOUR_W), Math.floor(r() * 60), Math.floor(r() * 60));
+    const name = pick(SURN) + pick(GIVEN) + (r() < 0.7 ? pick(GIVEN) : '');
+    const phone = `1${pick(['3', '5', '7', '8', '9'])}${Math.floor(r() * 10)}****${pad(Math.floor(r() * 10000), 4)}`;
+    out.push({ id: `m${key}-${i}`, day: key, ts, name, phone, gender: pickW(r, WEIGHTS.gender), age: pickW(r, WEIGHTS.age), role: pickW(r, WEIGHTS.role), channel: pickW(r, WEIGHTS.channel), live: false });
+  }
+  out.sort((a, b) => a.ts - b.ts);
+  const kept = out.filter(x => x.ts <= until);
+  kept.forEach((x, i) => { x.seq = i + 1; });
+  return (mockCache[key] = kept);
+}
+const liveAll = () => sget(LS_REC, [], 'l');
+const deletedSet = () => new Set(sget(LS_DEL, [], 'l'));
+function recordsFor(key) {
+  const del = deletedSet();
+  return mockDay(key).concat(liveAll().filter(x => x.day === key)).filter(x => !del.has(x.id));
+}
+
+function toast(msg, inPhone) {
+  const el = inPhone ? $('#v-toast') : $('#toast');
+  if (!el) return;
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, 2400);
+}
+
+/* ================= 观众端 ================= */
+const V = { screen: 'welcome', i: 0, a: {}, consent: false, more: false, phoneErr: '', submitting: false, error: '', rec: null, already: false };
+let advanceTimer = 0;
+
+function validStep(st, v) {
+  if (st.type === 'text') return typeof v === 'string' && v.trim().length > 0;
+  if (st.type === 'tel') return /^1\d{10}$/.test(v || '');
+  return Number.isInteger(v);
+}
+function canNext() {
+  const st = STEPS[V.i];
+  if (V.submitting || !validStep(st, V.a[st.id])) return false;
+  return V.i < STEPS.length - 1 || V.consent;
+}
+function refreshNext() { const b = $('#q-next'); if (b) b.disabled = !canNext(); }
+
+function welcomeHTML() {
+  return `<div class="v">
+    <div class="v-scroll">
+      <div class="w-top">
+        <img class="w-logo" src="assets/vinci-logo.png" alt="VINCI 2026" width="600" height="111">
+        <div class="w-gallery"><span class="w-tri" aria-hidden="true"></span><b>艺术与媒体画廊</b><span>ART &amp; MEDIA GALLERY</span></div>
+      </div>
+      <div class="w-title">
+        <img class="w-cn" src="assets/kv-title-cn.png" alt="无界未来" width="999" height="236">
+        <img class="w-en" src="assets/kv-title-en.png" alt="FUTURES UNBOUND" width="1829" height="129">
+        <p class="w-sub">Visualizing Tech, Culture, and Connection in an AI- and Robot-Driven World</p>
+      </div>
+      <img class="w-art" src="assets/kv-art.webp" alt="" width="1500" height="920">
+      <p class="w-meta"><span class="sq sq-green" aria-hidden="true"></span>2026.11.1–11.15 / 杭州 HANGZHOU</p>
+      <p class="w-intro">欢迎来到第 19 届 VINCI 艺术与媒体画廊。签到一共 6 个小问题，大约 30 秒。</p>
+    </div>
+    <div class="v-foot"><button type="button" class="btn-next btn-wide" data-act="start">开始签到 →</button></div>
+    <div class="strip" aria-hidden="true"></div>
+  </div>`;
+}
+
+function questionHTML() {
+  const st = STEPS[V.i], val = V.a[st.id], n = STEPS.length, last = V.i === n - 1;
+  let field;
+  if (st.type === 'radio') {
+    field = `<div class="opts" role="radiogroup" aria-labelledby="q-title">${st.options.map((o, j) =>
+      `<button type="button" class="opt" role="radio" aria-checked="${val === j}" data-act="pick" data-o="${j}"><span>${o}</span><span class="box" aria-hidden="true"></span></button>`).join('')}</div>`;
+  } else {
+    const tel = st.type === 'tel';
+    field = `<input class="field-input" id="q-input" type="${tel ? 'tel' : 'text'}" ${tel ? 'inputmode="numeric" maxlength="11" autocomplete="tel"' : 'maxlength="20" autocomplete="name"'} placeholder="${st.placeholder}" value="${esc(val || '')}" aria-labelledby="q-title" aria-describedby="q-err">
+      <p class="field-err" id="q-err" ${tel && V.phoneErr ? '' : 'hidden'}>${V.phoneErr}</p>`;
+  }
+  const consent = last ? `<div class="consent">
+      <label class="check"><input type="checkbox" id="q-consent" ${V.consent ? 'checked' : ''}><span>我同意主办方收集以上信息，用于观展签到和人数统计。<button type="button" class="link" data-act="more" aria-expanded="${V.more}">${V.more ? '收起说明' : '查看说明'}</button></span></label>
+      ${V.more ? `<div class="privacy"><p>收集内容：姓名、手机号、性别、年龄段、身份、获知渠道。</p><p>用途：观众签到、统计观展人数。只在主办方内部使用，不提供给第三方。</p><p>保存期限：<span class="ph">待主办方确认</span>，到期删除。</p></div>` : ''}
+    </div>` : '';
+  const label = V.submitting ? '提交中…' : last ? (V.error ? '重新提交' : '提交签到') : '下一步';
+  return `<div class="v">
+    <div class="q-top"><div class="q-progress" aria-hidden="true">${STEPS.map((_, k) => `<i class="${k <= V.i ? 'on' : ''}"></i>`).join('')}</div></div>
+    <div class="v-scroll">
+      <p class="q-num"><span class="sq sq-${MARKS[V.i % 4]}" aria-hidden="true"></span>${pad(V.i + 1)} / ${pad(n)}</p>
+      <h2 class="q-title" id="q-title">${st.title}</h2>
+      ${st.hint ? `<p class="q-hint">${st.hint}</p>` : ''}
+      ${field}
+      ${consent}
+      ${V.error ? `<div class="alert" role="alert">${V.error}</div>` : ''}
+    </div>
+    <div class="v-foot">
+      <button type="button" class="btn-ghost" data-act="back">← 上一步</button>
+      <button type="button" class="btn-next" id="q-next" data-act="${last ? 'submit' : 'next'}" ${canNext() ? '' : 'disabled'}>${label}</button>
+    </div>
+  </div>`;
+}
+
+function doneHTML() {
+  const r = V.rec;
+  return `<div class="v">
+    <div class="v-scroll">
+      <div class="done-top"><span class="chip">${V.already ? '今天已签到' : '签到成功'}</span><span class="done-code">${code(r)}</span></div>
+      ${V.already ? `<p class="done-note">这个手机号今天 ${hm(r.ts)} 已经签到过了，下面是你的入场凭证。</p>` : ''}
+      <div class="done-seq"><span>今天第</span><b>${r.seq}</b><span>位观众</span></div>
+      <pre class="ascii" id="ascii" aria-hidden="true"></pre>
+      <dl class="ticket">
+        <div><dt>姓名</dt><dd>${esc(r.name)}</dd></div>
+        <div><dt>日期</dt><dd>${cnDate(r.day)}</dd></div>
+        <div><dt>签到时间</dt><dd class="mono">${hm(r.ts)}</dd></div>
+      </dl>
+      <div class="live"><span class="sq sq-orange blink" aria-hidden="true"></span><span class="clock mono" id="v-clock">${hms(now())}</span><span class="live-label">实时</span></div>
+      <p class="done-hint">入场时把这个页面给工作人员看一眼。时钟一直在走，说明不是截图。</p>
+    </div>
+    <div class="strip" aria-hidden="true"></div>
+  </div>`;
+}
+
+// 每个人的专属 ASCII 图案：用签到编号播种，同一个人每次打开都一样
+function drawAscii() {
+  const el = $('#ascii');
+  if (!el || !V.rec) return;
+  const r = rng(hash(V.rec.id));
+  const cols = 46, rows = 11, ramp = ' .:-=+*#%@';
+  el.style.setProperty('--tint', `var(--${['blue', 'red', 'orange', 'green'][Math.floor(r() * 4)]})`);
+  const blobs = Array.from({ length: 3 }, () => ({ x: r() * cols, y: r() * rows, sx: 5 + r() * 10, sy: 2 + r() * 3, w: 0.55 + r() * 0.6 }));
+  const fx = 0.18 + r() * 0.3, fy = 0.35 + r() * 0.5, ph = r() * 6.28;
+  let html = '';
+  for (let y = 0; y < rows; y++) {
+    let cls = '', run = '';
+    const flush = () => { if (run) html += `<span class="${cls}">${esc(run)}</span>`; run = ''; };
+    for (let x = 0; x < cols; x++) {
+      let v = 0.12 + 0.12 * (Math.sin(x * fx + ph) + Math.cos(y * fy - ph));
+      for (const b of blobs) v += b.w * Math.exp(-(((x - b.x) / b.sx) ** 2 + ((y - b.y) / b.sy) ** 2));
+      v = Math.max(0, Math.min(0.999, v));
+      const c = v < 0.3 ? 'f' : v < 0.72 ? 't' : 'k';
+      if (c !== cls) { flush(); cls = c; }
+      run += ramp[Math.floor(v * ramp.length)];
+    }
+    flush();
+    html += '\n';
+  }
+  el.innerHTML = html;
+}
+
+function renderVisitor() {
+  const s = $('#screen');
+  s.innerHTML = (V.screen === 'welcome' ? welcomeHTML() : V.screen === 'q' ? questionHTML() : doneHTML())
+    + '<div class="v-toast" id="v-toast" role="status" aria-live="polite" hidden></div>';
+  if (V.screen === 'done') drawAscii();
+  $$('#flow li').forEach(li => { if (li.dataset.k === V.screen) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current'); });
+}
+function goStep(i) {
+  clearTimeout(advanceTimer);
+  V.i = i; V.phoneErr = ''; V.error = '';
+  renderVisitor();
+  const inp = $('#q-input');
+  if (inp) inp.focus({ preventScroll: true });
+}
+
+function submit() {
+  if (!canNext()) return;
+  V.submitting = true; V.error = '';
+  renderVisitor();
+  const failBox = $('#fail-next');
+  const fail = failBox && failBox.checked;
+  setTimeout(() => {
+    V.submitting = false;
+    if (fail) {
+      failBox.checked = false;
+      V.error = '提交没有成功，可能是网络不稳定。你填的内容都还在，再点一次「重新提交」。';
+      renderVisitor();
+      return;
+    }
+    const phone = V.a.phone;
+    const live = liveAll();
+    const del = deletedSet();
+    const dup = live.find(x => x.day === TODAY && x.phone === phone && !del.has(x.id));
+    let rec = dup, already = !!dup;
+    if (!dup) {
+      rec = {
+        id: 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), day: TODAY, ts: now(),
+        seq: mockDay(TODAY).length + live.filter(x => x.day === TODAY).length + 1,
+        name: V.a.name.trim(), phone, gender: V.a.gender, age: V.a.age, role: V.a.role, channel: V.a.channel, live: true,
+      };
+      live.push(rec);
+      sset(LS_REC, live, 'l');
+    }
+    sset(LS_DEV, { day: TODAY, id: rec.id }, 'l');
+    Object.assign(V, { screen: 'done', i: 0, a: {}, consent: false, more: false, phoneErr: '', error: '', rec, already });
+    renderVisitor();
+  }, 650);
+}
+
+function resetVisitor() {
+  Object.assign(V, { screen: 'welcome', i: 0, a: {}, consent: false, more: false, phoneErr: '', submitting: false, error: '', rec: null, already: false });
+  const dev = sget(LS_DEV, null, 'l');
+  if (dev && dev.day === TODAY) {
+    const rec = liveAll().find(x => x.id === dev.id);
+    if (rec && !deletedSet().has(rec.id)) Object.assign(V, { screen: 'done', rec, already: true });
+  }
+}
+
+$('#screen').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const act = b.dataset.act;
+  if (act === 'start') { V.screen = 'q'; goStep(0); }
+  else if (act === 'pick') {
+    const st = STEPS[V.i];
+    V.a[st.id] = +b.dataset.o;
+    renderVisitor();
+    if (V.i < STEPS.length - 1) {
+      const at = V.i;
+      clearTimeout(advanceTimer);
+      advanceTimer = setTimeout(() => { if (V.screen === 'q' && V.i === at) goStep(at + 1); }, 260);
+    }
+  }
+  else if (act === 'next') { if (canNext()) goStep(V.i + 1); }
+  else if (act === 'back') { if (V.i === 0) { V.screen = 'welcome'; renderVisitor(); } else goStep(V.i - 1); }
+  else if (act === 'more') { e.preventDefault(); V.more = !V.more; renderVisitor(); }
+  else if (act === 'submit') submit();
+});
+$('#screen').addEventListener('input', e => {
+  if (e.target.id !== 'q-input') return;
+  const st = STEPS[V.i];
+  if (st.type === 'tel') {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
+    if (digits !== e.target.value) e.target.value = digits;
+    V.a.phone = digits;
+    if (V.phoneErr && validStep(st, digits)) { V.phoneErr = ''; $('#q-err').hidden = true; }
+  } else {
+    V.a[st.id] = e.target.value;
+  }
+  refreshNext();
+});
+function phoneCheck() {
+  const st = STEPS[V.i];
+  if (st.type !== 'tel') return;
+  const v = V.a.phone || '';
+  V.phoneErr = v && !validStep(st, v) ? '手机号是 11 位数字，以 1 开头。' : '';
+  const el = $('#q-err');
+  if (el) { el.textContent = V.phoneErr; el.hidden = !V.phoneErr; }
+}
+$('#screen').addEventListener('focusout', e => { if (e.target.id === 'q-input') phoneCheck(); });
+$('#screen').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.target.id !== 'q-input' || e.isComposing) return;
+  e.preventDefault();
+  phoneCheck();
+  if (canNext()) goStep(V.i + 1);
+});
+$('#screen').addEventListener('change', e => { if (e.target.id === 'q-consent') { V.consent = e.target.checked; refreshNext(); } });
+
+$('#again').addEventListener('click', () => {
+  sdel(LS_DEV, 'l');
+  resetVisitor();
+  renderVisitor();
+  toast('现在可以当作另一位观众签到了', true);
+});
+
+setInterval(() => { const c = $('#v-clock'); if (c) c.textContent = hms(now()); }, 1000);
+
+/* ================= 后台 ================= */
+const A = { authed: !!sget(SS_AUTH, false, 's'), tries: 0, lockUntil: sget(SS_LOCK, 0, 's') || 0, err: '', day: TODAY, q: '', showAll: false, auto: true, exportOpen: false, armDel: null, sig: '' };
+let chartItems = [];
+const inFrame = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+const dataSig = () => `${liveAll().length}:${deletedSet().size}`;
+const currentRecs = () => A.day === 'all' ? OPEN_DAYS.flatMap(recordsFor) : recordsFor(A.day);
+
+function pcts(counts) {
+  const total = counts.reduce((a, b) => a + b, 0);
+  if (!total) return counts.map(() => 0);
+  const raw = counts.map(c => c * 100 / total);
+  const fl = raw.map(Math.floor);
+  let rem = 100 - fl.reduce((a, b) => a + b, 0);
+  raw.map((v, i) => [v - fl[i], i]).sort((a, b) => b[0] - a[0]).forEach(([, i]) => { if (rem > 0) { fl[i]++; rem--; } });
+  return fl;
+}
+function hourBins(recs, ref) {
+  let lo = OPEN_H, hi = CLOSE_H - 1;
+  recs.forEach(r => { const h = new Date(r.ts).getHours(); if (h < lo) lo = h; if (h > hi) hi = h; });
+  const bins = [];
+  for (let h = lo; h <= hi; h++) bins.push({ h, value: 0, future: ref != null && atTime(TODAY, h) > ref });
+  recs.forEach(r => { const b = bins[new Date(r.ts).getHours() - lo]; b.value++; b.future = false; });
+  return bins;
+}
+const kpi = (label, val, sub, mark) => `<div class="kpi"><span class="k-label"><span class="sq sq-${mark}" aria-hidden="true"></span>${label}</span><span class="k-val">${typeof val === 'number' ? val.toLocaleString('zh-CN') : val}</span><span class="k-sub">${sub}</span></div>`;
+function delta(cur, prev, label) {
+  if (!prev) return `${label}：没有可比数据`;
+  const d = Math.round((cur - prev) / prev * 100);
+  return `${label} <span class="delta ${d > 0 ? 'up' : d < 0 ? 'down' : ''}">${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d)}%</span>`;
+}
+
+function loginHTML() {
+  const locked = A.lockUntil > Date.now();
+  const secs = Math.ceil((A.lockUntil - Date.now()) / 1000);
+  return `<div class="login">
+    <img class="login-logo" src="assets/vinci-logo.png" alt="VINCI 2026" width="600" height="111">
+    <h1>签到后台</h1>
+    <p class="muted">无界未来 FUTURES UNBOUND · 观众签到数据</p>
+    <form id="login-form" novalidate>
+      <label class="lbl" for="admin-pw">后台密码</label>
+      <div class="pw"><input class="field-input" id="admin-pw" type="password" autocomplete="current-password" ${locked ? 'disabled' : ''}><button type="button" class="btn-ghost" data-act="pw-toggle" aria-pressed="false">显示</button></div>
+      <p class="field-err" id="login-err" role="alert" ${A.err || locked ? '' : 'hidden'}>${locked ? `连续输错 ${MAX_TRIES} 次，${secs} 秒后再试。` : A.err}</p>
+      <button type="submit" class="btn-next btn-wide" ${locked ? 'disabled' : ''}>进入后台</button>
+    </form>
+    <p class="login-hint">演示密码 <code>vinci2026</code>。正式版在服务器上校验，密码不会写在网页里。</p>
+  </div>`;
+}
+
+function mixPanel(st, recs, mark) {
+  const labels = st.short || st.options;
+  const counts = labels.map((_, j) => recs.filter(x => x[st.id] === j).length);
+  const total = counts.reduce((a, b) => a + b, 0);
+  const p = pcts(counts), max = Math.max(1, ...counts);
+  const top = counts.indexOf(Math.max(...counts));
+  const order = labels.map((_, i) => i);
+  if (st.id === 'channel' || st.id === 'role') order.sort((a, b) => counts[b] - counts[a] || a - b);
+  return `<div class="mix-panel">
+    <div class="mix-head"><h3><span class="sq sq-${mark}" aria-hidden="true"></span> ${st.label}</h3><span>${total ? `最多：${labels[top]}` : '暂无数据'}</span></div>
+    <div class="rows">${order.map(i => `<div class="row" title="${esc(labels[i])}：${counts[i]} 人，占 ${p[i]}%">
+      <span class="lbl">${labels[i]}</span>
+      <span class="track"><span class="fill${i === top && total ? ' top' : ''}" style="width:${(counts[i] / max * 100).toFixed(1)}%"></span></span>
+      <span class="pct">${p[i]}%</span><span class="cnt">${counts[i]}</span></div>`).join('')}</div>
+  </div>`;
+}
+
+function tableHTML(recs) {
+  const all = A.day === 'all';
+  const q = A.q.trim();
+  let rows = recs.slice().sort((a, b) => a.day === b.day ? b.seq - a.seq : (a.day < b.day ? 1 : -1));
+  if (q) rows = rows.filter(x => x.name.includes(q) || x.phone.includes(q));
+  const shown = A.showAll || q ? rows : rows.slice(0, 15);
+  const body = shown.map(r => `<tr${r.live ? ' class="is-live"' : ''}>
+      <td class="mono">${code(r)}</td>
+      <td class="mono">${all ? md(r.day) + ' ' : ''}${hm(r.ts)}</td>
+      <td>${esc(r.name)}${r.live ? '<span class="tag">你提交的</span>' : ''}</td>
+      <td class="mono">${esc(r.live ? maskPhone(r.phone) : r.phone)}</td>
+      <td>${optLabel('gender', r.gender)}</td><td>${optLabel('age', r.age)}</td><td>${optLabel('role', r.role)}</td><td>${optLabel('channel', r.channel)}</td>
+      <td><button type="button" class="del${A.armDel === r.id ? ' armed' : ''}" data-act="del" data-id="${r.id}">${A.armDel === r.id ? '确认删除' : '删除'}</button></td>
+    </tr>`).join('');
+  const more = !q && rows.length > 15 ? `<button type="button" class="btn-line more" data-act="more-rows">${A.showAll ? '只看最新 15 条' : `显示全部 ${rows.length} 条`}</button>` : '';
+  return `<div class="tbl-wrap"><table>
+      <thead><tr><th>编号</th><th>时间</th><th>姓名</th><th>手机号</th><th>性别</th><th>年龄段</th><th>身份</th><th>获知渠道</th><th><span class="sr">操作</span></th></tr></thead>
+      <tbody>${body || `<tr><td colspan="9" class="empty">${q ? `没有找到「${esc(q)}」` : '这一天还没有人签到'}</td></tr>`}</tbody>
+    </table></div>${more}`;
+}
+
+function toCSV(recs) {
+  const rows = recs.slice().sort((a, b) => a.day === b.day ? a.seq - b.seq : (a.day < b.day ? -1 : 1));
+  const cell = s => { s = String(s); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const head = ['编号', '日期', '签到时间', '姓名', '手机号', '性别', '年龄段', '身份', '获知渠道'];
+  return [head.join(',')].concat(rows.map(r => [code(r), r.day, hms(r.ts), r.name, r.phone,
+    stepOf('gender').options[r.gender], stepOf('age').options[r.age], stepOf('role').options[r.role], stepOf('channel').options[r.channel]].map(cell).join(','))).join('\n');
+}
+
+function dashHTML() {
+  const all = A.day === 'all';
+  const recs = currentRecs();
+  const isToday = A.day === TODAY;
+  const t = now();
+  let kpis, title, chartTitle, chartSub;
+  if (!all) {
+    const idx = OPEN_DAYS.indexOf(A.day);
+    const prevKey = idx > 0 ? OPEN_DAYS[idx - 1] : null;
+    let deltaText = '开幕日';
+    if (prevKey) {
+      let pr = recordsFor(prevKey);
+      if (isToday) { const off = t - atTime(TODAY, 0); pr = pr.filter(x => x.ts - atTime(prevKey, 0) <= off); }
+      deltaText = delta(recs.length, pr.length, isToday ? '比昨天同时段' : '比前一天');
+    }
+    const bins = hourBins(recs, isToday ? t : null);
+    const peak = bins.reduce((a, b) => b.value > a.value ? b : a, { value: 0 });
+    const cumul = OPEN_DAYS.slice(0, idx + 1).reduce((s, d) => s + recordsFor(d).length, 0);
+    kpis = [
+      kpi('签到人数', recs.length, deltaText, 'red'),
+      isToday ? kpi('最近一小时', recs.filter(x => x.ts > t - 3600e3 && x.ts <= t).length, `截至 ${hm(t)}`, 'orange')
+              : kpi('平均每小时', Math.round(recs.length / (CLOSE_H - OPEN_H)), `开馆 ${OPEN_H}:00–${CLOSE_H}:00`, 'orange'),
+      kpi('高峰时段', peak.value ? `${pad(peak.h)}:00` : '—', peak.value ? `${pad(peak.h)}:00–${pad(peak.h + 1)}:00 · ${peak.value} 人` : '暂无签到', 'yellow'),
+      kpi('展期累计', cumul, `第 ${idx + 1} 天 / 共 ${EXPO.length} 天`, 'green'),
+    ];
+    const curH = new Date(t).getHours();
+    chartItems = bins.map(b => ({ label: `${pad(b.h)}:00`, value: b.value, future: b.future, hi: isToday ? b.h === curH : b.h === peak.h, title: `${pad(b.h)}:00–${pad(b.h + 1)}:00 · ${b.value} 人` }));
+    title = `${cnDate(A.day)}${isToday ? ' · 今天' : ''}`;
+    chartTitle = '时段分布';
+    chartSub = isToday ? '每小时签到人数 · 橙色是当前这一小时，虚线是还没到的时段' : '每小时签到人数 · 橙色是高峰时段';
+  } else {
+    const per = EXPO.map(d => ({ d, n: d <= TODAY ? recordsFor(d).length : null }));
+    const best = per.filter(p => p.n != null).reduce((a, b) => b.n > a.n ? b : a);
+    const bins = hourBins(recs, null);
+    const peak = bins.reduce((a, b) => b.value > a.value ? b : a, { value: 0 });
+    kpis = [
+      kpi('累计签到', recs.length, `${md(OPEN_DAYS[0])}–${md(TODAY)} · ${OPEN_DAYS.length} 天`, 'red'),
+      kpi('日均签到', Math.round(recs.length / OPEN_DAYS.length), '今天按当前进度计', 'orange'),
+      kpi('最高单日', md(best.d), `${WEEK[dow(best.d)]} · ${best.n} 人`, 'yellow'),
+      kpi('高峰时段', `${pad(peak.h)}:00`, `全展期合计 ${peak.value} 人`, 'green'),
+    ];
+    chartItems = per.map(p => ({ label: md(p.d), sub: p.d === TODAY ? '今天' : WEEK[dow(p.d)].slice(1), value: p.n || 0, future: p.n == null, hi: p.d === best.d, title: p.n == null ? `${md(p.d)} 还没到` : `${md(p.d)} ${WEEK[dow(p.d)]} · ${p.n} 人` }));
+    title = `全展期 · ${md(EXPO[0])}–${md(EXPO[EXPO.length - 1])}`;
+    chartTitle = '每日签到';
+    chartSub = '整个展期每天的签到人数 · 橙色是最高单日，虚线是还没到的日子';
+  }
+  const days = EXPO.map(d => `<button type="button" class="day" data-act="day" data-day="${d}" aria-pressed="${A.day === d}" ${d > TODAY ? 'disabled' : ''}><b>${md(d)}</b><small>${d === TODAY ? '今天' : WEEK[dow(d)]}</small></button>`).join('');
+  const mix = ['gender', 'age', 'role', 'channel'].map((id, k) => mixPanel(stepOf(id), recs, MARKS[k])).join('');
+  const exportBox = A.exportOpen ? `<div class="export">
+      <div class="sec-head"><h2>导出 CSV</h2><p>${recs.length} 条记录 · ${all ? '全展期' : cnDate(A.day)}${inFrame ? ' · 预览里不能直接下载，正式版点按钮就会下载 .csv 文件' : ''}</p></div>
+      <textarea id="csv-text" rows="7" readonly spellcheck="false">${esc(toCSV(recs))}</textarea>
+      <div class="export-actions"><button type="button" class="btn-next" data-act="copy">复制全部</button>${inFrame ? '' : '<button type="button" class="btn-line" data-act="download">下载 .csv</button>'}<button type="button" class="btn-ghost" data-act="export">关闭</button></div>
+    </div>` : '';
+  return `<div class="admin">
+    <div class="a-head">
+      <div class="a-brand"><img class="a-logo" src="assets/vinci-logo.png" alt="VINCI 2026" width="600" height="111"><div><h1>${title}</h1><p class="muted" id="a-updated">${updatedText()}</p></div></div>
+      <div class="a-actions">
+        <button type="button" class="btn-line" data-act="auto" aria-pressed="${A.auto}"><span class="dot" aria-hidden="true"></span>实时更新</button>
+        <button type="button" class="btn-line" data-act="export" aria-expanded="${A.exportOpen}">导出 CSV</button>
+        <button type="button" class="btn-line" data-act="logout">退出</button>
+      </div>
+    </div>
+    <div class="days" role="group" aria-label="选择日期">${days}<button type="button" class="day day-all" data-act="day" data-day="all" aria-pressed="${all}"><b>全展期</b><small>汇总</small></button></div>
+    ${exportBox}
+    <div class="kpis">${kpis.join('')}</div>
+    <section class="sec"><div class="sec-head"><h2><span class="sq sq-orange" aria-hidden="true"></span>${chartTitle}</h2><p>${chartSub}</p></div><div class="chart" id="chart"></div></section>
+    <section class="sec"><div class="sec-head"><h2><span class="sq sq-green" aria-hidden="true"></span>观众构成</h2><p>按签到人数算比例${all ? ' · 全展期合计' : ''}</p></div><div class="mix">${mix}</div></section>
+    <section class="sec"><div class="sec-head"><h2><span class="sq sq-red" aria-hidden="true"></span>签到明细</h2><p>最新的在最上面 · 共 ${recs.length} 条</p></div>
+      <div class="tbl-tools"><input class="search" id="a-search" type="search" placeholder="搜姓名或手机号后四位" value="${esc(A.q)}" aria-label="搜索签到记录"></div>
+      <div id="a-table">${tableHTML(recs)}</div>
+    </section>
+    <p class="foot-note">一个人签一次，签到人数就是来扫码的观众数，没扫码的观众不在统计里。正式版的数据存在服务器上，所有设备看到的是同一份。</p>
+  </div>`;
+}
+const updatedText = () => `数据更新于 ${hms(now())} · 含演示数据`;
+
+function drawChart() {
+  const el = $('#chart');
+  if (!el) return;
+  const items = chartItems;
+  const W = Math.max(280, Math.floor(el.clientWidth || 600)), H = 230;
+  const hasSub = items.some(i => i.sub);
+  const padX = 4, padT = 22, padB = hasSub ? 40 : 26;
+  const n = items.length, slot = (W - padX * 2) / n;
+  const maxV = Math.max(1, ...items.map(i => i.value));
+  const base = H - padB, hgt = base - padT;
+  const cx = i => padX + slot * (i + 0.5);
+  const bw = Math.max(4, Math.min(44, slot * 0.62));
+  const every = slot < 30 ? 2 : 1;
+  let s = `<line class="c-base" x1="${padX}" x2="${W - padX}" y1="${base}" y2="${base}"/>`;
+  items.forEach((it, i) => {
+    const x = (cx(i) - bw / 2).toFixed(1);
+    if (it.future) { s += `<g><title>${esc(it.title)}</title><rect class="c-future" x="${x}" y="${base - 18}" width="${bw.toFixed(1)}" height="17"/></g>`; return; }
+    const h = it.value > 0 ? Math.max(2, hgt * it.value / maxV) : 0;
+    s += `<g><title>${esc(it.title)}</title><rect class="c-bar${it.hi ? ' hi' : ''}" x="${x}" y="${(base - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}"/>`;
+    if (slot >= 20) s += `<text class="c-val${it.hi ? ' hi' : ''}" x="${cx(i).toFixed(1)}" y="${(base - h - 6).toFixed(1)}" text-anchor="middle">${it.value}</text>`;
+    s += '</g>';
+  });
+  items.forEach((it, i) => {
+    if (i % every) return;
+    s += `<text class="c-ax${it.hi ? ' hi' : ''}" x="${cx(i).toFixed(1)}" y="${base + 16}" text-anchor="middle">${it.label}</text>`;
+    if (it.sub) s += `<text class="c-ax" x="${cx(i).toFixed(1)}" y="${base + 31}" text-anchor="middle">${it.sub}</text>`;
+  });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(items.map(i => i.title).join('；'))}">${s}</svg>`;
+}
+
+function renderAdmin() {
+  const root = $('#view-admin');
+  if (!A.authed) { root.innerHTML = loginHTML(); return; }
+  root.innerHTML = dashHTML();
+  A.sig = dataSig();
+  drawChart();
+}
+function renderTable() { const t = $('#a-table'); if (t) t.innerHTML = tableHTML(currentRecs()); }
+
+$('#view-admin').addEventListener('submit', e => {
+  if (e.target.id !== 'login-form') return;
+  e.preventDefault();
+  if (A.lockUntil > Date.now()) return;
+  const v = $('#admin-pw').value;
+  if (!v) { A.err = '请输入密码。'; }
+  else if (v === PASSWORD) { A.authed = true; A.tries = 0; A.err = ''; sset(SS_AUTH, true, 's'); renderAdmin(); return; }
+  else if (++A.tries >= MAX_TRIES) { A.tries = 0; A.err = ''; A.lockUntil = Date.now() + LOCK_MS; sset(SS_LOCK, A.lockUntil, 's'); }
+  else A.err = `密码不对，还可以再试 ${MAX_TRIES - A.tries} 次。`;
+  renderAdmin();
+  const pw = $('#admin-pw'); if (pw && !pw.disabled) pw.focus();
+});
+
+$('#view-admin').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const act = b.dataset.act;
+  if (act === 'pw-toggle') {
+    const pw = $('#admin-pw'); const show = pw.type === 'password';
+    pw.type = show ? 'text' : 'password'; b.textContent = show ? '隐藏' : '显示'; b.setAttribute('aria-pressed', show);
+  } else if (act === 'day') { A.day = b.dataset.day; A.showAll = false; A.armDel = null; renderAdmin(); }
+  else if (act === 'auto') { A.auto = !A.auto; b.setAttribute('aria-pressed', A.auto); }
+  else if (act === 'export') { A.exportOpen = !A.exportOpen; renderAdmin(); }
+  else if (act === 'logout') { A.authed = false; A.exportOpen = false; sdel(SS_AUTH, 's'); renderAdmin(); }
+  else if (act === 'more-rows') { A.showAll = !A.showAll; renderTable(); }
+  else if (act === 'del') {
+    const id = b.dataset.id;
+    if (A.armDel !== id) { A.armDel = id; renderTable(); return; }
+    const del = sget(LS_DEL, [], 'l'); del.push(id); sset(LS_DEL, del, 'l');
+    A.armDel = null; renderAdmin(); toast('已删除 1 条记录');
+  } else if (act === 'copy') {
+    const ta = $('#csv-text');
+    const fallback = () => { ta.focus(); ta.select(); toast('已全选，按 Ctrl+C 或 ⌘+C 复制'); };
+    try { navigator.clipboard.writeText(ta.value).then(() => toast('已复制，可以直接粘贴到表格里'), fallback); } catch (err) { fallback(); }
+  } else if (act === 'download') {
+    const blob = new Blob(['﻿' + $('#csv-text').value], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `VINCI签到_${A.day === 'all' ? '全展期' : A.day}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+});
+$('#view-admin').addEventListener('input', e => { if (e.target.id === 'a-search') { A.q = e.target.value; renderTable(); } });
+
+// 后台每 4 秒看一次有没有新签到；同一台设备的其他标签页提交时立刻刷新
+setInterval(() => {
+  if ($('#view-admin').hidden) return;
+  if (!A.authed) {
+    if (A.lockUntil) {
+      if (A.lockUntil <= Date.now()) { A.lockUntil = 0; sdel(SS_LOCK, 's'); renderAdmin(); }
+      else { const el = $('#login-err'); if (el) el.textContent = `连续输错 ${MAX_TRIES} 次，${Math.ceil((A.lockUntil - Date.now()) / 1000)} 秒后再试。`; }
+    }
+    return;
+  }
+  const u = $('#a-updated'); if (u && A.auto) u.textContent = updatedText();
+  if (A.auto && dataSig() !== A.sig) renderAdmin();
+}, 1000);
+window.addEventListener('storage', e => {
+  if (e.key === LS_REC || e.key === LS_DEL || e.key === LS_DEV || e.key === null) {
+    delete mem['l' + LS_REC]; delete mem['l' + LS_DEL]; delete mem['l' + LS_DEV];
+  }
+});
+let resizeT = 0;
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(drawChart, 120); });
+
+/* ================= 切换页面 / 重置 ================= */
+function route() {
+  const admin = location.hash === '#admin';
+  $('#view-visitor').hidden = admin;
+  $('#view-admin').hidden = !admin;
+  $('#tab-visitor').setAttribute('aria-pressed', !admin);
+  $('#tab-admin').setAttribute('aria-pressed', admin);
+  if (admin) renderAdmin(); else renderVisitor();
+}
+$$('.pseg button').forEach(b => b.addEventListener('click', () => {
+  const target = b.dataset.view === 'admin' ? '#admin' : '#visitor';
+  if (location.hash !== target) location.hash = target; else route();
+}));
+window.addEventListener('hashchange', route);
+
+const resetBtn = $('#reset-demo');
+let resetArm = 0;
+resetBtn.addEventListener('click', () => {
+  if (!resetArm) {
+    resetBtn.textContent = '再点一次确认';
+    resetBtn.classList.add('armed');
+    resetArm = setTimeout(() => { resetArm = 0; resetBtn.textContent = '重置演示数据'; resetBtn.classList.remove('armed'); }, 3000);
+    return;
+  }
+  clearTimeout(resetArm); resetArm = 0;
+  resetBtn.textContent = '重置演示数据'; resetBtn.classList.remove('armed');
+  [LS_REC, LS_DEV, LS_DEL].forEach(k => sdel(k, 'l'));
+  [SS_AUTH, SS_LOCK].forEach(k => sdel(k, 's'));
+  Object.assign(A, { authed: false, tries: 0, lockUntil: 0, err: '', day: TODAY, q: '', showAll: false, exportOpen: false, armDel: null });
+  resetVisitor();
+  route();
+  toast('演示数据已重置：清空了你提交的签到和登录状态');
+});
+
+resetVisitor();
+route();
+})();
+</script>
+<!-- ARTIFACT-END -->
+</body>
+</html>
