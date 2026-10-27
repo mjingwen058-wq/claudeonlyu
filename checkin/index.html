@@ -138,6 +138,14 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .opt .box{width:14px;height:14px;border:1.5px solid var(--ink);flex:none}
 .opt[aria-checked="true"]{background:var(--ink);color:var(--on-ink);font-weight:600}
 .opt[aria-checked="true"] .box{border-color:var(--on-ink);background:var(--sq-yellow)}
+.stepper{display:grid;grid-template-columns:64px minmax(0,1fr) 64px;border:1px solid var(--ink)}
+.stepper button{height:72px;border:0;background:var(--paper);font-size:30px;line-height:1;cursor:pointer}
+.stepper button:first-child{border-right:1px solid var(--ink)}
+.stepper button:last-child{border-left:1px solid var(--ink)}
+.stepper button:disabled{color:var(--rule);cursor:not-allowed}
+.stepper output{display:grid;place-items:center;font-size:40px;font-weight:700}
+.stepper-note{margin:-6px 0 0;font-size:14px;color:var(--ink-2)}
+.stepper-note b{font-family:var(--mono)}
 .consent{display:grid;gap:10px;padding-top:14px;border-top:1px dotted var(--rule)}
 .link{border:0;background:none;padding:0 0 0 4px;color:var(--ink);text-decoration:underline;text-underline-offset:3px;font-size:13px;cursor:pointer}
 .privacy{font-size:12px;line-height:1.7;color:var(--ink-2);background:var(--wash);padding:10px 12px}
@@ -156,7 +164,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .ascii .f{color:#C9C9C9}
 .ascii .t{color:var(--tint)}
 .ascii .k{color:var(--ink)}
-.ticket{margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.ticket{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}
 .ticket div{display:grid;gap:2px;min-width:0}
 .ticket dt{font-size:11px;color:var(--muted)}
 .ticket dd{margin:0;font-size:15px;font-weight:600;overflow-wrap:anywhere}
@@ -223,7 +231,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .c-val{fill:var(--ink);font-family:var(--mono);font-size:11px}
 .c-val.hi{font-weight:600}
 
-.mix{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px}
+.mix{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px}
 @media (max-width:1100px){.mix{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:620px){.mix{grid-template-columns:minmax(0,1fr)}}
 .mix-panel{display:grid;gap:10px;align-content:start;min-width:0}
@@ -242,7 +250,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .tbl-tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .search{flex:1 1 220px;max-width:320px;border:1px solid var(--ink);border-radius:0;background:var(--paper);padding:8px 12px;font:inherit;font-size:14px;color:var(--ink)}
 .tbl-wrap{position:relative;overflow-x:auto;border-top:2px solid var(--ink)}
-table{width:100%;min-width:820px;border-collapse:collapse;font-size:13.5px}
+table{width:100%;min-width:760px;border-collapse:collapse;font-size:13.5px}
 th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 th{font-size:12px;font-weight:600;color:var(--muted)}
 tr.is-live td{background:#FFF8E1}
@@ -250,6 +258,7 @@ tr.is-live td{background:#FFF8E1}
 .del{border:0;background:none;color:var(--muted);font-size:12px;cursor:pointer;padding:2px 4px}
 .del:hover{color:var(--danger)}
 .del.armed{color:var(--on-ink);background:var(--danger)}
+.btn-export{background:var(--ink);color:var(--on-ink)}
 .more{justify-self:start}
 .empty{padding:28px 0;text-align:center;color:var(--muted)}
 .export{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;padding:14px;background:var(--wash)}
@@ -283,10 +292,10 @@ tr.is-live td{background:#FFF8E1}
         <ol class="flow" id="flow">
           <li data-k="scan">前台扫码，微信或手机相机都能打开</li>
           <li data-k="welcome">欢迎页：展览信息 + 开始签到</li>
-          <li data-k="q">6 个问题，一屏一题</li>
+          <li data-k="q">5 个问题，一屏一题</li>
           <li data-k="done">入场凭证：第几位观众 + 走动的时钟</li>
         </ol>
-        <p class="note-sm">同一个手机号一天只记一次。重复扫码或者重复提交，会直接显示原来的凭证。</p>
+        <p class="note-sm">同一个手机号一天只记一次。重复扫码或者重复提交，会直接显示原来的凭证。同行的朋友不用再扫码。</p>
       </section>
       <section class="note">
         <h2><span class="sq sq-yellow" aria-hidden="true"></span>原型控制</h2>
@@ -326,17 +335,19 @@ const STEPS = [
   { id: 'phone', title: '手机号', hint: '用来确认今天是否已经签到，不会公开', type: 'tel', placeholder: '11 位手机号' },
   { id: 'gender', label: '性别', title: '性别', type: 'radio', options: ['男', '女', '不便透露'] },
   { id: 'age', label: '年龄段', title: '年龄段', type: 'radio', options: ['18 岁以下', '18–25 岁', '26–35 岁', '36–45 岁', '46 岁及以上'], short: ['18 岁以下', '18–25', '26–35', '36–45', '46 岁及以上'] },
-  { id: 'role', label: '身份', title: '你的身份', type: 'radio', options: ['学生', '艺术 / 设计从业者', '科技 / 互联网从业者', '教师 / 研究者', '其他'], short: ['学生', '艺术/设计', '科技/互联网', '教师/研究者', '其他'] },
-  { id: 'channel', label: '获知渠道', title: '你是怎么知道这个展览的？', type: 'radio', options: ['小红书', '微信公众号 / 朋友圈', '抖音 / 视频号', '朋友推荐', '学校 / 单位组织', '路过', '其他'], short: ['小红书', '公众号/朋友圈', '抖音/视频号', '朋友推荐', '学校/单位', '路过', '其他'] },
+  { id: 'companions', title: '今天还有几位同行？', hint: '不算你自己。一起来的朋友不用再扫码', type: 'count' },
 ];
 const stepOf = id => STEPS.find(s => s.id === id);
 const optLabel = (id, i) => { const s = stepOf(id); return (s.short || s.options)[i] ?? ''; };
-const WEIGHTS = { gender: [42, 55, 3], age: [5, 42, 31, 13, 9], role: [45, 20, 15, 8, 12], channel: [28, 24, 10, 16, 12, 6, 4] };
+const WEIGHTS = { gender: [42, 55, 3], age: [5, 42, 31, 13, 9], companions: [42, 33, 12, 8, 3, 2] };
+const GROUPS = ['独自一人', '2 人', '3–4 人', '5 人及以上'];
+const groupOf = r => r.companions === 0 ? 0 : r.companions === 1 ? 1 : r.companions <= 3 ? 2 : 3;
+const visitors = rs => rs.reduce((s, r) => s + r.companions + 1, 0);
 const HOUR_W = [6, 9, 11, 14, 15, 13, 10, 6];        // 10 点到 17 点
 const MARKS = ['red', 'orange', 'yellow', 'green'];
 
 /* ---------- 存储：读写失败时退回内存，流程照样能走 ---------- */
-const LS_REC = 'vinci-checkin-records', LS_DEV = 'vinci-checkin-device', LS_DEL = 'vinci-checkin-deleted';
+const LS_REC = 'vinci-checkin-records-v2', LS_DEV = 'vinci-checkin-device-v2', LS_DEL = 'vinci-checkin-deleted-v2';
 const SS_AUTH = 'vinci-admin', SS_LOCK = 'vinci-admin-lock';
 const mem = {};
 function area(kind) { try { return kind === 's' ? window.sessionStorage : window.localStorage; } catch (e) { return null; } }
@@ -378,7 +389,7 @@ function mockDay(key) {
     const ts = atTime(key, OPEN_H + pickW(r, HOUR_W), Math.floor(r() * 60), Math.floor(r() * 60));
     const name = pick(SURN) + pick(GIVEN) + (r() < 0.7 ? pick(GIVEN) : '');
     const phone = `1${pick(['3', '5', '7', '8', '9'])}${Math.floor(r() * 10)}****${pad(Math.floor(r() * 10000), 4)}`;
-    out.push({ id: `m${key}-${i}`, day: key, ts, name, phone, gender: pickW(r, WEIGHTS.gender), age: pickW(r, WEIGHTS.age), role: pickW(r, WEIGHTS.role), channel: pickW(r, WEIGHTS.channel), live: false });
+    out.push({ id: `m${key}-${i}`, day: key, ts, name, phone, gender: pickW(r, WEIGHTS.gender), age: pickW(r, WEIGHTS.age), companions: pickW(r, WEIGHTS.companions), live: false });
   }
   out.sort((a, b) => a.ts - b.ts);
   const kept = out.filter(x => x.ts <= until);
@@ -406,6 +417,7 @@ let advanceTimer = 0;
 function validStep(st, v) {
   if (st.type === 'text') return typeof v === 'string' && v.trim().length > 0;
   if (st.type === 'tel') return /^1\d{10}$/.test(v || '');
+  if (st.type === 'count') return Number.isInteger(v) && v >= 0 && v <= 50;
   return Number.isInteger(v);
 }
 function canNext() {
@@ -429,7 +441,7 @@ function welcomeHTML() {
       </div>
       <img class="w-art" src="assets/kv-art.webp" alt="" width="1500" height="920">
       <p class="w-meta"><span class="sq sq-green" aria-hidden="true"></span>2026.11.1–11.15 / 杭州 HANGZHOU</p>
-      <p class="w-intro">欢迎来到第 19 届 VINCI 艺术与媒体画廊。签到一共 6 个小问题，大约 30 秒。</p>
+      <p class="w-intro">欢迎来到第 19 届 VINCI 艺术与媒体画廊。签到一共 5 个小问题，大约 30 秒。</p>
     </div>
     <div class="v-foot"><button type="button" class="btn-next btn-wide" data-act="start">开始签到 →</button></div>
     <div class="strip" aria-hidden="true"></div>
@@ -439,7 +451,11 @@ function welcomeHTML() {
 function questionHTML() {
   const st = STEPS[V.i], val = V.a[st.id], n = STEPS.length, last = V.i === n - 1;
   let field;
-  if (st.type === 'radio') {
+  if (st.type === 'count') {
+    const c = Number.isInteger(val) ? val : 0;
+    field = `<div class="stepper"><button type="button" data-act="dec" aria-label="减少一位" ${c <= 0 ? 'disabled' : ''}>−</button><output id="q-count" aria-live="polite">${c}</output><button type="button" data-act="inc" aria-label="增加一位" ${c >= 50 ? 'disabled' : ''}>+</button></div>
+      <p class="stepper-note">加上你，今天一共 <b>${c + 1}</b> 人</p>`;
+  } else if (st.type === 'radio') {
     field = `<div class="opts" role="radiogroup" aria-labelledby="q-title">${st.options.map((o, j) =>
       `<button type="button" class="opt" role="radio" aria-checked="${val === j}" data-act="pick" data-o="${j}"><span>${o}</span><span class="box" aria-hidden="true"></span></button>`).join('')}</div>`;
   } else {
@@ -449,7 +465,7 @@ function questionHTML() {
   }
   const consent = last ? `<div class="consent">
       <label class="check"><input type="checkbox" id="q-consent" ${V.consent ? 'checked' : ''}><span>我同意主办方收集以上信息，用于观展签到和人数统计。<button type="button" class="link" data-act="more" aria-expanded="${V.more}">${V.more ? '收起说明' : '查看说明'}</button></span></label>
-      ${V.more ? `<div class="privacy"><p>收集内容：姓名、手机号、性别、年龄段、身份、获知渠道。</p><p>用途：观众签到、统计观展人数。只在主办方内部使用，不提供给第三方。</p><p>保存期限：<span class="ph">待主办方确认</span>，到期删除。</p></div>` : ''}
+      ${V.more ? `<div class="privacy"><p>收集内容：姓名、手机号、性别、年龄段、同行人数。</p><p>用途：观众签到、统计观展人数。只在主办方内部使用，不提供给第三方。</p><p>保存期限：3 个月，到期自动删除。</p></div>` : ''}
     </div>` : '';
   const label = V.submitting ? '提交中…' : last ? (V.error ? '重新提交' : '提交签到') : '下一步';
   return `<div class="v">
@@ -481,6 +497,7 @@ function doneHTML() {
         <div><dt>姓名</dt><dd>${esc(r.name)}</dd></div>
         <div><dt>日期</dt><dd>${cnDate(r.day)}</dd></div>
         <div><dt>签到时间</dt><dd class="mono">${hm(r.ts)}</dd></div>
+        <div><dt>到访人数</dt><dd>${r.companions ? `${r.companions + 1} 人（含同行 ${r.companions} 位）` : '1 人'}</dd></div>
       </dl>
       <div class="live"><span class="sq sq-orange blink" aria-hidden="true"></span><span class="clock mono" id="v-clock">${hms(now())}</span><span class="live-label">实时</span></div>
       <p class="done-hint">入场时把这个页面给工作人员看一眼。时钟一直在走，说明不是截图。</p>
@@ -554,7 +571,7 @@ function submit() {
       rec = {
         id: 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), day: TODAY, ts: now(),
         seq: mockDay(TODAY).length + live.filter(x => x.day === TODAY).length + 1,
-        name: V.a.name.trim(), phone, gender: V.a.gender, age: V.a.age, role: V.a.role, channel: V.a.channel, live: true,
+        name: V.a.name.trim(), phone, gender: V.a.gender, age: V.a.age, companions: V.a.companions || 0, live: true,
       };
       live.push(rec);
       sset(LS_REC, live, 'l');
@@ -578,7 +595,7 @@ $('#screen').addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (!b) return;
   const act = b.dataset.act;
-  if (act === 'start') { V.screen = 'q'; goStep(0); }
+  if (act === 'start') { V.screen = 'q'; V.a.companions = V.a.companions ?? 0; goStep(0); }
   else if (act === 'pick') {
     const st = STEPS[V.i];
     V.a[st.id] = +b.dataset.o;
@@ -589,6 +606,7 @@ $('#screen').addEventListener('click', e => {
       advanceTimer = setTimeout(() => { if (V.screen === 'q' && V.i === at) goStep(at + 1); }, 260);
     }
   }
+  else if (act === 'inc' || act === 'dec') { V.a.companions = Math.max(0, Math.min(50, (V.a.companions || 0) + (act === 'inc' ? 1 : -1))); renderVisitor(); }
   else if (act === 'next') { if (canNext()) goStep(V.i + 1); }
   else if (act === 'back') { if (V.i === 0) { V.screen = 'welcome'; renderVisitor(); } else goStep(V.i - 1); }
   else if (act === 'more') { e.preventDefault(); V.more = !V.more; renderVisitor(); }
@@ -653,8 +671,8 @@ function hourBins(recs, ref) {
   let lo = OPEN_H, hi = CLOSE_H - 1;
   recs.forEach(r => { const h = new Date(r.ts).getHours(); if (h < lo) lo = h; if (h > hi) hi = h; });
   const bins = [];
-  for (let h = lo; h <= hi; h++) bins.push({ h, value: 0, future: ref != null && atTime(TODAY, h) > ref });
-  recs.forEach(r => { const b = bins[new Date(r.ts).getHours() - lo]; b.value++; b.future = false; });
+  for (let h = lo; h <= hi; h++) bins.push({ h, value: 0, checkins: 0, future: ref != null && atTime(TODAY, h) > ref });
+  recs.forEach(r => { const b = bins[new Date(r.ts).getHours() - lo]; b.value += r.companions + 1; b.checkins++; b.future = false; });
   return bins;
 }
 const kpi = (label, val, sub, mark) => `<div class="kpi"><span class="k-label"><span class="sq sq-${mark}" aria-hidden="true"></span>${label}</span><span class="k-val">${typeof val === 'number' ? val.toLocaleString('zh-CN') : val}</span><span class="k-sub">${sub}</span></div>`;
@@ -688,7 +706,6 @@ function mixPanel(st, recs, mark) {
   const p = pcts(counts), max = Math.max(1, ...counts);
   const top = counts.indexOf(Math.max(...counts));
   const order = labels.map((_, i) => i);
-  if (st.id === 'channel' || st.id === 'role') order.sort((a, b) => counts[b] - counts[a] || a - b);
   return `<div class="mix-panel">
     <div class="mix-head"><h3><span class="sq sq-${mark}" aria-hidden="true"></span> ${st.label}</h3><span>${total ? `最多：${labels[top]}` : '暂无数据'}</span></div>
     <div class="rows">${order.map(i => `<div class="row" title="${esc(labels[i])}：${counts[i]} 人，占 ${p[i]}%">
@@ -709,22 +726,22 @@ function tableHTML(recs) {
       <td class="mono">${all ? md(r.day) + ' ' : ''}${hm(r.ts)}</td>
       <td>${esc(r.name)}${r.live ? '<span class="tag">你提交的</span>' : ''}</td>
       <td class="mono">${esc(r.live ? maskPhone(r.phone) : r.phone)}</td>
-      <td>${optLabel('gender', r.gender)}</td><td>${optLabel('age', r.age)}</td><td>${optLabel('role', r.role)}</td><td>${optLabel('channel', r.channel)}</td>
+      <td>${optLabel('gender', r.gender)}</td><td>${stepOf('age').options[r.age]}</td><td class="mono">${r.companions ? '+' + r.companions : '—'}</td>
       <td><button type="button" class="del${A.armDel === r.id ? ' armed' : ''}" data-act="del" data-id="${r.id}">${A.armDel === r.id ? '确认删除' : '删除'}</button></td>
     </tr>`).join('');
   const more = !q && rows.length > 15 ? `<button type="button" class="btn-line more" data-act="more-rows">${A.showAll ? '只看最新 15 条' : `显示全部 ${rows.length} 条`}</button>` : '';
   return `<div class="tbl-wrap"><table>
-      <thead><tr><th>编号</th><th>时间</th><th>姓名</th><th>手机号</th><th>性别</th><th>年龄段</th><th>身份</th><th>获知渠道</th><th><span class="sr">操作</span></th></tr></thead>
-      <tbody>${body || `<tr><td colspan="9" class="empty">${q ? `没有找到「${esc(q)}」` : '这一天还没有人签到'}</td></tr>`}</tbody>
+      <thead><tr><th>编号</th><th>时间</th><th>姓名</th><th>手机号</th><th>性别</th><th>年龄段</th><th>同行</th><th><span class="sr">操作</span></th></tr></thead>
+      <tbody>${body || `<tr><td colspan="8" class="empty">${q ? `没有找到「${esc(q)}」` : '这一天还没有人签到'}</td></tr>`}</tbody>
     </table></div>${more}`;
 }
 
 function toCSV(recs) {
   const rows = recs.slice().sort((a, b) => a.day === b.day ? a.seq - b.seq : (a.day < b.day ? -1 : 1));
   const cell = s => { s = String(s); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  const head = ['编号', '日期', '签到时间', '姓名', '手机号', '性别', '年龄段', '身份', '获知渠道'];
+  const head = ['编号', '日期', '签到时间', '姓名', '手机号', '性别', '年龄段', '同行人数', '到访人数'];
   return [head.join(',')].concat(rows.map(r => [code(r), r.day, hms(r.ts), r.name, r.phone,
-    stepOf('gender').options[r.gender], stepOf('age').options[r.age], stepOf('role').options[r.role], stepOf('channel').options[r.channel]].map(cell).join(','))).join('\n');
+    stepOf('gender').options[r.gender], stepOf('age').options[r.age], r.companions, r.companions + 1].map(cell).join(','))).join('\n');
 }
 
 function dashHTML() {
@@ -740,44 +757,45 @@ function dashHTML() {
     if (prevKey) {
       let pr = recordsFor(prevKey);
       if (isToday) { const off = t - atTime(TODAY, 0); pr = pr.filter(x => x.ts - atTime(prevKey, 0) <= off); }
-      deltaText = delta(recs.length, pr.length, isToday ? '比昨天同时段' : '比前一天');
+      deltaText = delta(visitors(recs), visitors(pr), isToday ? '比昨天同时段' : '比前一天');
     }
     const bins = hourBins(recs, isToday ? t : null);
     const peak = bins.reduce((a, b) => b.value > a.value ? b : a, { value: 0 });
-    const cumul = OPEN_DAYS.slice(0, idx + 1).reduce((s, d) => s + recordsFor(d).length, 0);
+    const v = visitors(recs);
     kpis = [
-      kpi('签到人数', recs.length, deltaText, 'red'),
-      isToday ? kpi('最近一小时', recs.filter(x => x.ts > t - 3600e3 && x.ts <= t).length, `截至 ${hm(t)}`, 'orange')
-              : kpi('平均每小时', Math.round(recs.length / (CLOSE_H - OPEN_H)), `开馆 ${OPEN_H}:00–${CLOSE_H}:00`, 'orange'),
-      kpi('高峰时段', peak.value ? `${pad(peak.h)}:00` : '—', peak.value ? `${pad(peak.h)}:00–${pad(peak.h + 1)}:00 · ${peak.value} 人` : '暂无签到', 'yellow'),
-      kpi('展期累计', cumul, `第 ${idx + 1} 天 / 共 ${EXPO.length} 天`, 'green'),
+      kpi('到访人数', v, deltaText, 'red'),
+      kpi('签到人数', recs.length, `同行 ${v - recs.length} 人 · 平均每组 ${recs.length ? (v / recs.length).toFixed(1) : 0} 人`, 'orange'),
+      isToday ? kpi('最近一小时', visitors(recs.filter(x => x.ts > t - 3600e3 && x.ts <= t)), `到访人数 · 截至 ${hm(t)}`, 'yellow')
+              : kpi('平均每小时', Math.round(v / (CLOSE_H - OPEN_H)), `开馆 ${OPEN_H}:00–${CLOSE_H}:00`, 'yellow'),
+      kpi('高峰时段', peak.value ? `${pad(peak.h)}:00` : '—', peak.value ? `${pad(peak.h)}:00–${pad(peak.h + 1)}:00 · ${peak.value} 人到访` : '还没有人签到', 'green'),
     ];
     const curH = new Date(t).getHours();
-    chartItems = bins.map(b => ({ label: `${pad(b.h)}:00`, value: b.value, future: b.future, hi: isToday ? b.h === curH : b.h === peak.h, title: `${pad(b.h)}:00–${pad(b.h + 1)}:00 · ${b.value} 人` }));
+    chartItems = bins.map(b => ({ label: `${pad(b.h)}:00`, value: b.value, future: b.future, hi: isToday ? b.h === curH : b.h === peak.h, title: `${pad(b.h)}:00–${pad(b.h + 1)}:00 · 到访 ${b.value} 人（签到 ${b.checkins} 人）` }));
     title = `${cnDate(A.day)}${isToday ? ' · 今天' : ''}`;
     chartTitle = '时段分布';
-    chartSub = isToday ? '每小时签到人数 · 橙色是当前这一小时，虚线是还没到的时段' : '每小时签到人数 · 橙色是高峰时段';
+    chartSub = isToday ? '每小时到访人数 · 橙色是当前这一小时，虚线是还没到的时段' : '每小时到访人数 · 橙色是高峰时段';
   } else {
-    const per = EXPO.map(d => ({ d, n: d <= TODAY ? recordsFor(d).length : null }));
+    const per = EXPO.map(d => ({ d, n: d <= TODAY ? visitors(recordsFor(d)) : null, c: recordsFor(d).length }));
     const best = per.filter(p => p.n != null).reduce((a, b) => b.n > a.n ? b : a);
-    const bins = hourBins(recs, null);
-    const peak = bins.reduce((a, b) => b.value > a.value ? b : a, { value: 0 });
+    const v = visitors(recs);
     kpis = [
-      kpi('累计签到', recs.length, `${md(OPEN_DAYS[0])}–${md(TODAY)} · ${OPEN_DAYS.length} 天`, 'red'),
-      kpi('日均签到', Math.round(recs.length / OPEN_DAYS.length), '今天按当前进度计', 'orange'),
-      kpi('最高单日', md(best.d), `${WEEK[dow(best.d)]} · ${best.n} 人`, 'yellow'),
-      kpi('高峰时段', `${pad(peak.h)}:00`, `全展期合计 ${peak.value} 人`, 'green'),
+      kpi('累计到访', v, `${md(OPEN_DAYS[0])}–${md(TODAY)} · ${OPEN_DAYS.length} 天`, 'red'),
+      kpi('累计签到', recs.length, `同行 ${v - recs.length} 人`, 'orange'),
+      kpi('日均到访', Math.round(v / OPEN_DAYS.length), '今天按当前进度计', 'yellow'),
+      kpi('最高单日', md(best.d), `${WEEK[dow(best.d)]} · ${best.n} 人到访`, 'green'),
     ];
-    chartItems = per.map(p => ({ label: md(p.d), sub: p.d === TODAY ? '今天' : WEEK[dow(p.d)].slice(1), value: p.n || 0, future: p.n == null, hi: p.d === best.d, title: p.n == null ? `${md(p.d)} 还没到` : `${md(p.d)} ${WEEK[dow(p.d)]} · ${p.n} 人` }));
+    chartItems = per.map(p => ({ label: md(p.d), sub: p.d === TODAY ? '今天' : WEEK[dow(p.d)].slice(1), value: p.n || 0, future: p.n == null, hi: p.d === best.d, title: p.n == null ? `${md(p.d)} 还没到` : `${md(p.d)} ${WEEK[dow(p.d)]} · 到访 ${p.n} 人（签到 ${p.c} 人）` }));
     title = `全展期 · ${md(EXPO[0])}–${md(EXPO[EXPO.length - 1])}`;
-    chartTitle = '每日签到';
-    chartSub = '整个展期每天的签到人数 · 橙色是最高单日，虚线是还没到的日子';
+    chartTitle = '每日到访';
+    chartSub = '整个展期每天的到访人数 · 橙色是最高单日，虚线是还没到的日子';
   }
   const days = EXPO.map(d => `<button type="button" class="day" data-act="day" data-day="${d}" aria-pressed="${A.day === d}" ${d > TODAY ? 'disabled' : ''}><b>${md(d)}</b><small>${d === TODAY ? '今天' : WEEK[dow(d)]}</small></button>`).join('');
-  const mix = ['gender', 'age', 'role', 'channel'].map((id, k) => mixPanel(stepOf(id), recs, MARKS[k])).join('');
+  const mix = ['gender', 'age'].map((id, k) => mixPanel(stepOf(id), recs, MARKS[k])).join('')
+    + mixPanel({ id: 'group', label: '同行情况', options: GROUPS }, recs.map(r => ({ ...r, group: groupOf(r) })), 'yellow');
+  const allRecs = OPEN_DAYS.flatMap(recordsFor);
   const exportBox = A.exportOpen ? `<div class="export">
-      <div class="sec-head"><h2>导出 CSV</h2><p>${recs.length} 条记录 · ${all ? '全展期' : cnDate(A.day)}${inFrame ? ' · 预览里不能直接下载，正式版点按钮就会下载 .csv 文件' : ''}</p></div>
-      <textarea id="csv-text" rows="7" readonly spellcheck="false">${esc(toCSV(recs))}</textarea>
+      <div class="sec-head"><h2>一键导出全部</h2><p>${allRecs.length} 条记录 · 全展期${inFrame ? ' · 预览里不能直接下载；正式版点一下按钮就会下载 .csv 文件，Excel 直接打开' : ''}</p></div>
+      <textarea id="csv-text" rows="7" readonly spellcheck="false">${esc(toCSV(allRecs))}</textarea>
       <div class="export-actions"><button type="button" class="btn-next" data-act="copy">复制全部</button>${inFrame ? '' : '<button type="button" class="btn-line" data-act="download">下载 .csv</button>'}<button type="button" class="btn-ghost" data-act="export">关闭</button></div>
     </div>` : '';
   return `<div class="admin">
@@ -785,7 +803,7 @@ function dashHTML() {
       <div class="a-brand"><img class="a-logo" src="assets/vinci-logo.png" alt="VINCI 2026" width="600" height="111"><div><h1>${title}</h1><p class="muted" id="a-updated">${updatedText()}</p></div></div>
       <div class="a-actions">
         <button type="button" class="btn-line" data-act="auto" aria-pressed="${A.auto}"><span class="dot" aria-hidden="true"></span>实时更新</button>
-        <button type="button" class="btn-line" data-act="export" aria-expanded="${A.exportOpen}">导出 CSV</button>
+        <button type="button" class="btn-line btn-export" data-act="export" aria-expanded="${A.exportOpen}">一键导出全部</button>
         <button type="button" class="btn-line" data-act="logout">退出</button>
       </div>
     </div>
@@ -793,12 +811,12 @@ function dashHTML() {
     ${exportBox}
     <div class="kpis">${kpis.join('')}</div>
     <section class="sec"><div class="sec-head"><h2><span class="sq sq-orange" aria-hidden="true"></span>${chartTitle}</h2><p>${chartSub}</p></div><div class="chart" id="chart"></div></section>
-    <section class="sec"><div class="sec-head"><h2><span class="sq sq-green" aria-hidden="true"></span>观众构成</h2><p>按签到人数算比例${all ? ' · 全展期合计' : ''}</p></div><div class="mix">${mix}</div></section>
+    <section class="sec"><div class="sec-head"><h2><span class="sq sq-green" aria-hidden="true"></span>观众构成</h2><p>性别和年龄段按签到人算，同行者没有填信息${all ? ' · 全展期合计' : ''}</p></div><div class="mix">${mix}</div></section>
     <section class="sec"><div class="sec-head"><h2><span class="sq sq-red" aria-hidden="true"></span>签到明细</h2><p>最新的在最上面 · 共 ${recs.length} 条</p></div>
       <div class="tbl-tools"><input class="search" id="a-search" type="search" placeholder="搜姓名或手机号后四位" value="${esc(A.q)}" aria-label="搜索签到记录"></div>
       <div id="a-table">${tableHTML(recs)}</div>
     </section>
-    <p class="foot-note">一个人签一次，签到人数就是来扫码的观众数，没扫码的观众不在统计里。正式版的数据存在服务器上，所有设备看到的是同一份。</p>
+    <p class="foot-note">到访人数 = 签到的人 + 他们填的同行人数，没扫码的观众不在统计里。签到记录保存 3 个月，到期自动删除，要长期保留请先「一键导出全部」。正式版的数据存在服务器上，所有设备看到的是同一份。</p>
   </div>`;
 }
 const updatedText = () => `数据更新于 ${hms(now())} · 含演示数据`;
@@ -880,7 +898,7 @@ $('#view-admin').addEventListener('click', e => {
     const blob = new Blob(['﻿' + $('#csv-text').value], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `VINCI签到_${A.day === 'all' ? '全展期' : A.day}.csv`;
+    a.download = `vinci-checkin-all-${TODAY}.csv`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
