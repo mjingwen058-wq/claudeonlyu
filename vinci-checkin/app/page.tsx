@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import AsciiMark from "@/components/AsciiMark";
 import { AGES, GENDERS, MAX_COMPANIONS, NAME_MAX, PHONE_RE, RETENTION_MONTHS } from "@/lib/fields";
-import { bj, cnDate } from "@/lib/time";
-import { checkinCode } from "@/lib/csv";
+import { bj } from "@/lib/time";
 
 interface Pass {
   id: string;
@@ -17,13 +16,14 @@ interface Pass {
 
 const PASS_KEY = "vinci-checkin-pass";
 const STEPS = [
-  { id: "name", title: "你的名字", hint: "会显示在入场凭证上" },
+  { id: "name", title: "你的名字", hint: "签到成功页上会显示" },
   { id: "phone", title: "手机号", hint: "用来确认今天是否已经签到，不会公开" },
   { id: "gender", title: "性别" },
   { id: "age", title: "年龄段" },
   { id: "companions", title: "今天还有几位同行？", hint: "不算你自己。一起来的朋友不用再扫码" },
 ] as const;
 const MARKS = ["red", "orange", "yellow", "green"];
+const EXPO_LINE = "2026.11.1–11.15 / 杭州 HANGZHOU";
 
 function readPass(): Pass | null {
   try {
@@ -44,6 +44,53 @@ function savePass(p: Pass | null) {
 
 type Screen = "loading" | "welcome" | "q" | "done";
 
+// 满版布局：手机上每一屏铺满整屏；电脑上左边固定整屏主视觉，右边是当前这一屏
+function Frame({ head, children, foot }: { head: React.ReactNode; children: React.ReactNode; foot?: React.ReactNode }) {
+  return (
+    <div className="vx">
+      <aside className="vx-aside" aria-hidden="true">
+        <img className="vx-logo" src="/assets/vinci-logo.png" alt="" width={600} height={111} />
+        <KvTitle />
+        <div className="fill-art bleed">
+          <img src="/assets/kv-art.webp" alt="" width={1500} height={920} />
+        </div>
+        <p className="w-meta">
+          <span className="sq sq-green" />
+          {EXPO_LINE}
+        </p>
+        <div className="strip bleed" />
+      </aside>
+      <main className="vx-panel">
+        <header className="vx-head">{head}</header>
+        <div className="vx-body">{children}</div>
+        {foot && <div className="vx-foot">{foot}</div>}
+        <div className="strip" aria-hidden="true" />
+      </main>
+    </div>
+  );
+}
+
+function KvTitle({ className = "" }: { className?: string }) {
+  return (
+    <div className={`w-title ${className}`}>
+      <img className="w-cn" src="/assets/kv-title-cn.png" alt="无界未来" width={999} height={236} />
+      <img className="w-en" src="/assets/kv-title-en.png" alt="FUTURES UNBOUND" width={1829} height={129} />
+      <p className="w-sub">Visualizing Tech, Culture, and Connection in an AI- and Robot-Driven World</p>
+    </div>
+  );
+}
+
+// 电脑上左边已经有主视觉了，右边的同样内容加 dup 隐藏
+function KvArt() {
+  return (
+    <div className="fill-art bleed dup" aria-hidden="true">
+      <img src="/assets/kv-art.webp" alt="" width={1500} height={920} />
+    </div>
+  );
+}
+
+const Logo = () => <img className="vx-logo" src="/assets/vinci-logo.png" alt="VINCI 2026" width={600} height={111} />;
+
 export default function CheckinPage() {
   const [screen, setScreen] = useState<Screen>("loading");
   const [i, setI] = useState(0);
@@ -61,7 +108,7 @@ export default function CheckinPage() {
   const [already, setAlready] = useState(false);
   const advance = useRef<ReturnType<typeof setTimeout>>();
 
-  // 今天在这台手机上签过，再扫码直接显示凭证
+  // 今天在这台手机上签过，再扫码直接显示签到成功页
   useEffect(() => {
     const p = readPass();
     if (p) {
@@ -143,65 +190,43 @@ export default function CheckinPage() {
     }
   }
 
-  function startOver() {
-    savePass(null);
-    setPass(null);
-    setAlready(false);
-    setName("");
-    setPhone("");
-    setGender("");
-    setAge("");
-    setCompanions("0");
-    setConsent(false);
-    setShowPrivacy(false);
-    setI(0);
-    setScreen("welcome");
-  }
-
   if (screen === "loading") {
-    return (
-      <main className="app">
-        <div className="v-loading">VINCI 2026</div>
-      </main>
-    );
+    return <div className="vx-loading">VINCI 2026</div>;
   }
 
   if (screen === "welcome") {
     return (
-      <main className="app">
-        <div className="v-body">
-          <div className="w-top">
-            <img className="w-logo" src="/assets/vinci-logo.png" alt="VINCI 2026" width={600} height={111} />
+      <Frame
+        head={
+          <>
+            <Logo />
             <div className="w-gallery">
               <span className="w-tri" aria-hidden="true" />
               <b>艺术与媒体画廊</b>
               <span>ART &amp; MEDIA GALLERY</span>
             </div>
-          </div>
-          <div className="w-title">
-            <img className="w-cn" src="/assets/kv-title-cn.png" alt="无界未来" width={999} height={236} />
-            <img className="w-en" src="/assets/kv-title-en.png" alt="FUTURES UNBOUND" width={1829} height={129} />
-            <p className="w-sub">Visualizing Tech, Culture, and Connection in an AI- and Robot-Driven World</p>
-          </div>
-          <img className="w-art" src="/assets/kv-art.webp" alt="" width={1500} height={920} />
-          <p className="w-meta">
-            <span className="sq sq-green" aria-hidden="true" />
-            2026.11.1–11.15 / 杭州 HANGZHOU
-          </p>
-          <p className="w-intro">欢迎来到第 19 届 VINCI 艺术与媒体画廊。签到一共 5 个小问题，大约 30 秒。</p>
-        </div>
-        <div className="v-foot">
+          </>
+        }
+        foot={
           <button type="button" className="btn-next btn-wide" onClick={() => { setScreen("q"); go(0); }}>
             开始签到 →
           </button>
-        </div>
-        <div className="strip" aria-hidden="true" />
-      </main>
+        }
+      >
+        <KvTitle className="dup" />
+        <KvArt />
+        <h1 className="w-hello">观众签到</h1>
+        <p className="w-meta">
+          <span className="sq sq-green" aria-hidden="true" />
+          {EXPO_LINE}
+        </p>
+        <p className="w-intro">欢迎来到第 19 届 VINCI 艺术与媒体画廊。签到一共 5 个小问题，大约 30 秒。</p>
+      </Frame>
     );
   }
 
   if (screen === "done" && pass) {
-    return <Done pass={pass} already={already} onOther={startOver} />;
+    return <Done pass={pass} already={already} />;
   }
 
   const step = STEPS[i];
@@ -217,23 +242,39 @@ export default function CheckinPage() {
   );
 
   return (
-    <main className="app">
-      <div className="v-body">
-        <div className="q-progress" aria-hidden="true">
-          {STEPS.map((s, k) => (
-            <i key={s.id} className={k <= i ? "on" : ""} />
-          ))}
-        </div>
-        <p className="q-num">
-          <span className={`sq sq-${MARKS[i % 4]}`} aria-hidden="true" />
-          {String(i + 1).padStart(2, "0")} / {String(STEPS.length).padStart(2, "0")}
-        </p>
-        <h1 className="q-title" id="q-title">
-          {step.title}
-        </h1>
-        {"hint" in step && <p className="q-hint">{step.hint}</p>}
+    <Frame
+      head={
+        <>
+          <Logo />
+          <span className="q-num">
+            <span className={`sq sq-${MARKS[i % 4]}`} aria-hidden="true" />
+            {String(i + 1).padStart(2, "0")} / {String(STEPS.length).padStart(2, "0")}
+          </span>
+        </>
+      }
+      foot={
+        <>
+          <button type="button" className="btn-ghost" onClick={back}>
+            ← 上一步
+          </button>
+          <button type="button" className="btn-next" disabled={blocked} onClick={next}>
+            {submitting ? "提交中…" : last ? (error ? "重新提交" : "提交签到") : "下一步"}
+          </button>
+        </>
+      }
+    >
+      <div className="q-progress" aria-hidden="true">
+        {STEPS.map((s, k) => (
+          <i key={s.id} className={k <= i ? "on" : ""} />
+        ))}
+      </div>
+      <h1 className="q-title" id="q-title">
+        {step.title}
+      </h1>
+      {"hint" in step && <p className="q-hint">{step.hint}</p>}
 
-        {step.id === "name" && (
+      {step.id === "name" && (
+        <>
           <input
             key="name"
             className="field-input"
@@ -247,97 +288,92 @@ export default function CheckinPage() {
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) next(); }}
           />
-        )}
-        {step.id === "phone" && (
-          <>
+          <KvArt />
+        </>
+      )}
+      {step.id === "phone" && (
+        <>
+          <input
+            key="phone"
+            className="field-input"
+            type="tel"
+            inputMode="numeric"
+            autoComplete="tel"
+            maxLength={11}
+            placeholder="11 位手机号"
+            aria-labelledby="q-title"
+            aria-describedby="phone-err"
+            autoFocus
+            value={phone}
+            onChange={(e) => {
+              const v = e.target.value.replace(/\D/g, "").slice(0, 11);
+              setPhone(v);
+              if (phoneErr && PHONE_RE.test(v)) setPhoneErr("");
+            }}
+            onBlur={checkPhone}
+            onKeyDown={(e) => { if (e.key === "Enter") next(); }}
+          />
+          <p className="field-err" id="phone-err" hidden={!phoneErr}>
+            {phoneErr}
+          </p>
+          <KvArt />
+        </>
+      )}
+      {step.id === "gender" && radio(GENDERS, gender, setGender)}
+      {step.id === "age" && radio(AGES, age, setAge)}
+      {step.id === "companions" && (
+        <>
+          <div className="stepper">
+            <button type="button" aria-label="减少一位" disabled={!(compN > 0)} onClick={() => setComp(compN - 1)}>
+              −
+            </button>
             <input
-              key="phone"
-              className="field-input"
-              type="tel"
+              type="text"
               inputMode="numeric"
-              autoComplete="tel"
-              maxLength={11}
-              placeholder="11 位手机号"
               aria-labelledby="q-title"
-              aria-describedby="phone-err"
-              autoFocus
-              value={phone}
-              onChange={(e) => {
-                const v = e.target.value.replace(/\D/g, "").slice(0, 11);
-                setPhone(v);
-                if (phoneErr && PHONE_RE.test(v)) setPhoneErr("");
-              }}
-              onBlur={checkPhone}
-              onKeyDown={(e) => { if (e.key === "Enter") next(); }}
+              value={companions}
+              onChange={(e) => setCompanions(e.target.value.replace(/\D/g, "").slice(0, 2))}
+              onBlur={() => setComp(Number.isNaN(compN) ? 0 : compN)}
+              onFocus={(e) => e.target.select()}
             />
-            <p className="field-err" id="phone-err" hidden={!phoneErr}>
-              {phoneErr}
-            </p>
-          </>
-        )}
-        {step.id === "gender" && radio(GENDERS, gender, setGender)}
-        {step.id === "age" && radio(AGES, age, setAge)}
-        {step.id === "companions" && (
-          <>
-            <div className="stepper">
-              <button type="button" aria-label="减少一位" disabled={!(compN > 0)} onClick={() => setComp(compN - 1)}>
-                −
-              </button>
-              <input
-                type="text"
-                inputMode="numeric"
-                aria-labelledby="q-title"
-                value={companions}
-                onChange={(e) => setCompanions(e.target.value.replace(/\D/g, "").slice(0, 2))}
-                onBlur={() => setComp(Number.isNaN(compN) ? 0 : compN)}
-                onFocus={(e) => e.target.select()}
-              />
-              <button type="button" aria-label="增加一位" disabled={!(compN < MAX_COMPANIONS)} onClick={() => setComp((Number.isNaN(compN) ? 0 : compN) + 1)}>
-                +
-              </button>
-            </div>
-            <p className="stepper-note">
-              {Number.isNaN(compN) ? "请填一个数字" : compN > MAX_COMPANIONS ? `最多填 ${MAX_COMPANIONS} 位，人更多请找工作人员登记` : <>加上你，今天一共 <b>{compN + 1}</b> 人</>}
-            </p>
-            <div className="consent">
-              <label className="check">
-                <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-                <span>
-                  我同意主办方收集以上信息，用于观展签到和人数统计。
-                  <button type="button" className="link" aria-expanded={showPrivacy} onClick={(e) => { e.preventDefault(); setShowPrivacy((v) => !v); }}>
-                    {showPrivacy ? "收起说明" : "查看说明"}
-                  </button>
-                </span>
-              </label>
-              {showPrivacy && (
-                <div className="privacy">
-                  <p>收集内容：姓名、手机号、性别、年龄段、同行人数。</p>
-                  <p>用途：观众签到、统计观展人数。只在主办方内部使用，不提供给第三方。</p>
-                  <p>保存期限：{RETENTION_MONTHS} 个月，到期自动删除。</p>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-        {error && (
-          <div className="alert" role="alert">
-            {error}
+            <button type="button" aria-label="增加一位" disabled={!(compN < MAX_COMPANIONS)} onClick={() => setComp((Number.isNaN(compN) ? 0 : compN) + 1)}>
+              +
+            </button>
           </div>
-        )}
-      </div>
-      <div className="v-foot">
-        <button type="button" className="btn-ghost" onClick={back}>
-          ← 上一步
-        </button>
-        <button type="button" className="btn-next" disabled={blocked} onClick={next}>
-          {submitting ? "提交中…" : last ? (error ? "重新提交" : "提交签到") : "下一步"}
-        </button>
-      </div>
-    </main>
+          <p className="stepper-note">
+            {Number.isNaN(compN) ? "请填一个数字" : compN > MAX_COMPANIONS ? `最多填 ${MAX_COMPANIONS} 位，人更多请找工作人员登记` : <>加上你，今天一共 <b>{compN + 1}</b> 人</>}
+          </p>
+          <div className="consent">
+            <label className="check">
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+              <span>
+                我同意主办方收集以上信息，用于观展签到和人数统计。
+                <button type="button" className="link" aria-expanded={showPrivacy} onClick={(e) => { e.preventDefault(); setShowPrivacy((v) => !v); }}>
+                  {showPrivacy ? "收起说明" : "查看说明"}
+                </button>
+              </span>
+            </label>
+            {showPrivacy && (
+              <div className="privacy">
+                <p>收集内容：姓名、手机号、性别、年龄段、同行人数。</p>
+                <p>用途：观众签到、统计观展人数。只在主办方内部使用，不提供给第三方。</p>
+                <p>保存期限：{RETENTION_MONTHS} 个月，到期自动删除。</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+      {error && (
+        <div className="alert" role="alert">
+          {error}
+        </div>
+      )}
+    </Frame>
   );
 }
 
-function Done({ pass, already, onOther }: { pass: Pass; already: boolean; onOther: () => void }) {
+// 最终页：签到成功 + 名字 + 主视觉 + 专属 ASCII 图案 + 走动的时钟 + 展期地点
+function Done({ pass, already }: { pass: Pass; already: boolean }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -345,48 +381,31 @@ function Done({ pass, already, onOther }: { pass: Pass; already: boolean; onOthe
   }, []);
 
   return (
-    <main className="app">
-      <div className="v-body">
-        <div className="done-top">
-          <span className="chip">{already ? "今天已签到" : "签到成功"}</span>
-          <span className="done-code">{checkinCode(pass)}</span>
-        </div>
-        {already && <p className="done-note">你今天 {bj(pass.ts).hm} 已经签到过了，下面是你的入场凭证。</p>}
-        <div className="done-seq">
-          <span>今天第</span>
-          <b>{pass.seq}</b>
-          <span>位观众</span>
-        </div>
-        <AsciiMark seed={pass.id} />
-        <dl className="ticket">
-          <div>
-            <dt>姓名</dt>
-            <dd>{pass.name}</dd>
-          </div>
-          <div>
-            <dt>日期</dt>
-            <dd>{cnDate(pass.day)}</dd>
-          </div>
-          <div>
-            <dt>签到时间</dt>
-            <dd className="mono">{bj(pass.ts).hm}</dd>
-          </div>
-          <div>
-            <dt>到访人数</dt>
-            <dd>{pass.companions ? `${pass.companions + 1} 人（含同行 ${pass.companions} 位）` : "1 人"}</dd>
-          </div>
-        </dl>
-        <div className="live">
-          <span className="sq sq-orange blink" aria-hidden="true" />
-          <span className="clock mono">{bj(now).hms}</span>
-          <span className="live-label">北京时间</span>
-        </div>
-        <p className="done-hint">入场时把这个页面给工作人员看一眼。时钟一直在走，说明不是截图。</p>
-        <button type="button" className="btn-ghost done-other" onClick={onOther}>
-          帮别人签到
-        </button>
+    <Frame
+      head={
+        <>
+          <Logo />
+          <span className="chip">签到成功</span>
+        </>
+      }
+    >
+      <div className="d-hello">
+        <h1 className="d-name">{pass.name}</h1>
+        <p>欢迎来到第 19 届 VINCI 艺术与媒体画廊。</p>
+        {already && <p className="d-note">这个手机号今天已经签过到了，不用再填。</p>}
       </div>
-      <div className="strip" aria-hidden="true" />
-    </main>
+      <KvTitle className="dup" />
+      <KvArt />
+      <AsciiMark seed={pass.id} />
+      <div className="live">
+        <span className="sq sq-orange blink" aria-hidden="true" />
+        <span className="clock mono">{bj(now).hms}</span>
+        <span className="live-label">北京时间</span>
+      </div>
+      <p className="w-meta">
+        <span className="sq sq-green" aria-hidden="true" />
+        {EXPO_LINE}
+      </p>
+    </Frame>
   );
 }

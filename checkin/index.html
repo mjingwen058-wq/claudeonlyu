@@ -14,10 +14,14 @@ img{max-width:100%}
 <!-- ARTIFACT-START -->
 <title>VINCI 2026 观众签到</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Montserrat:wght@400;500;600;700&display=swap">
 <style>
+/* 字体文件和页面放在一起，不从 Google 加载（国内打不开，会卡住整页） */
+@font-face{font-family:"Montserrat";font-style:normal;font-weight:400;font-display:swap;src:url("assets/fonts/montserrat-latin-400-normal.woff2") format("woff2")}
+@font-face{font-family:"Montserrat";font-style:normal;font-weight:500;font-display:swap;src:url("assets/fonts/montserrat-latin-500-normal.woff2") format("woff2")}
+@font-face{font-family:"Montserrat";font-style:normal;font-weight:600;font-display:swap;src:url("assets/fonts/montserrat-latin-600-normal.woff2") format("woff2")}
+@font-face{font-family:"Montserrat";font-style:normal;font-weight:700;font-display:swap;src:url("assets/fonts/montserrat-latin-700-normal.woff2") format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400;font-display:swap;src:url("assets/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:600;font-display:swap;src:url("assets/fonts/jetbrains-mono-latin-600-normal.woff2") format("woff2")}
 :root{
   /* 布局：照 KV 的白纸 + 点线参考线。观众端是手机竖屏，一屏一题；后台是 指标 → 时段图 → 观众构成 → 签到明细 */
   --paper:#FFFFFF;
@@ -67,14 +71,14 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .pseg button[aria-pressed="true"]{background:var(--on-ink);color:var(--ink);font-weight:600}
 .proto-reset{background:none;border:1px solid rgba(255,255,255,.3);color:var(--on-ink);border-radius:999px;font-size:12px;padding:5px 12px;cursor:pointer}
 .proto-reset.armed{border-color:var(--orange);color:var(--yellow)}
-@media (max-width:560px){.pseg{order:3;width:100%}.pseg button{flex:1}.proto-name small{display:none}}
+@media (max-width:560px){.proto-name{display:none}.pseg{margin-right:auto}}
 
 .page{max-width:1240px;margin:0 auto;padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 
 /* ---------- 观众端：手机框 + 说明 ---------- */
 .visitor{display:grid;grid-template-columns:400px minmax(0,290px);gap:48px;justify-content:center;align-items:start}
 .phone{position:relative;width:100%;height:min(820px,calc(100vh - 110px));min-height:640px;border:10px solid var(--ink);border-radius:46px;overflow:hidden;background:var(--paper);box-shadow:0 30px 60px -32px rgba(0,0,0,.45)}
-.screen{position:absolute;inset:0;display:flex;flex-direction:column}
+.screen{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden}
 .notes{display:grid;gap:28px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 72px)}
 .note{display:grid;gap:12px;padding-top:12px;border-top:1px dotted var(--rule)}
 .note h2{margin:0;font-size:14px;display:flex;align-items:center;gap:8px}
@@ -92,88 +96,93 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
   .notes{position:static;max-width:420px;margin:0 auto;width:100%}
 }
 @media (max-width:480px){
-  .page{padding-block:12px 32px}
-  .phone{border:1px solid var(--line);border-radius:4px;box-shadow:none;height:calc(100vh - 104px);height:calc(100dvh - 104px);min-height:560px}
+  .page:has(> .visitor:not([hidden])){padding:0}
+  .visitor{gap:0}
+  .phone{border:0;border-radius:0;box-shadow:none;height:calc(100vh - 46px);height:calc(100dvh - 46px - env(safe-area-inset-top,0px));min-height:520px}
+  .notes{display:none}
 }
 
-/* 手机屏内部 */
-.v{flex:1;min-height:0;display:flex;flex-direction:column}
-.v-scroll{flex:1;min-height:0;overflow-y:auto;padding:22px 24px 18px;display:flex;flex-direction:column;gap:18px}
-.v-foot{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 24px 20px;border-top:1px dotted var(--rule)}
-.btn-next{border:0;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:13px 28px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .15s}
+/* 手机屏内部：满版，每一屏铺满整屏，左右贴边 */
+.vx{--px-l:24px;--px-r:24px;min-height:100%;display:flex;flex-direction:column;background:var(--paper)}
+.vx-panel{flex:1;display:flex;flex-direction:column}
+.vx-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px var(--px-r) 12px var(--px-l);border-bottom:1px dotted var(--rule)}
+.vx-logo{display:block;height:20px;width:auto}
+.vx-body{flex:1 0 auto;display:flex;flex-direction:column;gap:16px;padding:18px var(--px-r) 18px var(--px-l)}
+.vx-foot{flex:none;position:sticky;bottom:0;z-index:2;background:var(--paper);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px var(--px-r) 12px var(--px-l);border-top:1px dotted var(--rule)}
+.bleed{margin-left:calc(-1*var(--px-l));margin-right:calc(-1*var(--px-r))}
+.fill-art{position:relative;flex:1 1 140px;min-height:140px;overflow:hidden}
+.fill-art img{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:cover;object-position:50% 42%}
+.btn-next{border:0;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:13px 28px;font-size:16px;font-weight:700;cursor:pointer;transition:opacity .15s}
 .btn-next:disabled{opacity:.22;cursor:not-allowed}
 .btn-wide{width:100%}
-.btn-ghost{border:0;background:none;color:var(--ink-2);padding:13px 4px;font-size:14px;cursor:pointer}
+.btn-ghost{border:0;background:none;color:var(--ink-2);padding:13px 4px;font-size:15px;cursor:pointer}
 .btn-line{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--ink);background:var(--paper);color:var(--ink);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
-.v-toast{position:absolute;left:24px;right:24px;bottom:84px;background:var(--ink);color:var(--on-ink);font-size:13px;padding:10px 14px;text-align:center}
+.v-toast{position:absolute;left:24px;right:24px;bottom:84px;z-index:3;background:var(--ink);color:var(--on-ink);font-size:13px;padding:10px 14px;text-align:center}
 
-/* 欢迎页 */
-.w-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-.w-logo{height:22px;width:auto}
 .w-gallery{display:grid;justify-items:end;gap:2px;text-align:right;font-size:10px;letter-spacing:.06em;line-height:1.25}
 .w-gallery b{font-size:13px;letter-spacing:.14em;font-weight:600}
 .w-tri{width:84px;height:2px;background:linear-gradient(90deg,var(--red) 0 25%,var(--orange) 25% 50%,var(--yellow) 50% 75%,var(--green) 75%)}
-.w-title{display:grid;gap:10px;padding-block:14px;border-top:1px dotted var(--rule);border-bottom:1px dotted var(--rule)}
-.w-cn{width:74%;height:auto}
+.w-title{display:grid;gap:10px}
+.w-cn{width:86%;height:auto}
 .w-en{width:100%;height:auto}
 .w-sub{margin:0;font-size:12px;line-height:1.45;color:var(--ink-2);font-weight:500}
-.w-art{display:block;width:calc(100% + 48px);max-width:none;height:auto;margin-inline:-24px}
+.w-hello{margin:0;font-size:28px;line-height:1.2;font-weight:700}
 .w-meta{margin:0;display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px;letter-spacing:.02em}
-.w-intro{margin:0;font-size:14px;color:var(--ink-2)}
+.w-intro{margin:-6px 0 0;font-size:14px;color:var(--ink-2)}
 
-/* 一屏一题 */
-.q-top{flex:none;padding:20px 24px 0}
+.q-num{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13px;color:var(--muted)}
 .q-progress{display:flex;gap:5px}
-.q-progress i{flex:1;height:3px;background:var(--line)}
+.q-progress i{flex:1;height:4px;background:var(--line)}
 .q-progress i.on{background:var(--ink)}
-.q-num{margin:6px 0 0;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:var(--muted)}
-.q-title{margin:-6px 0 0;font-size:26px;line-height:1.3;font-weight:700;text-wrap:balance}
-.q-hint{margin:-10px 0 0;font-size:13px;color:var(--muted)}
-.field-input{width:100%;border:0;border-bottom:1.5px solid var(--ink);border-radius:0;background:transparent;color:var(--ink);font-family:var(--sans);font-size:22px;padding:10px 2px;outline:none}
-.field-input::placeholder{color:#B8B8B8}
-.field-input:focus{border-bottom-color:var(--orange);box-shadow:0 1.5px 0 var(--orange)}
+.q-title{margin:6px 0 0;font-size:34px;line-height:1.2;font-weight:700;text-wrap:balance}
+.q-hint{margin:-8px 0 0;font-size:14px;color:var(--muted)}
+.field-input{width:100%;border:0;border-bottom:2px solid var(--ink);border-radius:0;background:transparent;color:var(--ink);font-family:var(--sans);font-size:28px;font-weight:600;padding:10px 2px;outline:none}
+.field-input::placeholder{color:#B8B8B8;font-weight:400}
+.field-input:focus{border-bottom-color:var(--orange)}
 .field-err{margin:-8px 0 0;font-size:13px;color:var(--danger)}
-.opts{display:grid;gap:10px}
-.opt{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:50px;text-align:left;padding:13px 16px;border:1px solid var(--ink);border-radius:2px;background:var(--paper);font-size:15px;cursor:pointer;transition:background .12s}
-.opt .box{width:14px;height:14px;border:1.5px solid var(--ink);flex:none}
-.opt[aria-checked="true"]{background:var(--ink);color:var(--on-ink);font-weight:600}
+.opts{flex:1 1 auto;display:flex;flex-direction:column;margin-left:calc(-1*var(--px-l));margin-right:calc(-1*var(--px-r));border-top:1px solid var(--ink)}
+.opt{flex:1 1 0;min-height:64px;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;padding:0 var(--px-r) 0 var(--px-l);border:0;border-bottom:1px solid var(--ink);background:var(--paper);font-size:22px;font-weight:500;cursor:pointer;transition:background .12s}
+.opt .box{width:18px;height:18px;border:2px solid var(--ink);flex:none}
+.opt[aria-checked="true"]{background:var(--ink);color:var(--on-ink);font-weight:700}
 .opt[aria-checked="true"] .box{border-color:var(--on-ink);background:var(--sq-yellow)}
-.stepper{display:grid;grid-template-columns:64px minmax(0,1fr) 64px;border:1px solid var(--ink)}
-.stepper button{height:72px;border:0;background:var(--paper);font-size:30px;line-height:1;cursor:pointer}
+.stepper{flex:1 1 160px;min-height:160px;display:grid;grid-template-columns:minmax(64px,1fr) minmax(0,1.4fr) minmax(64px,1fr);margin-left:calc(-1*var(--px-l));margin-right:calc(-1*var(--px-r));border-top:1px solid var(--ink);border-bottom:1px solid var(--ink)}
+.stepper button{border:0;background:var(--paper);font-size:48px;font-weight:300;line-height:1;cursor:pointer}
 .stepper button:first-child{border-right:1px solid var(--ink)}
 .stepper button:last-child{border-left:1px solid var(--ink)}
 .stepper button:disabled{color:var(--rule);cursor:not-allowed}
-.stepper output{display:grid;place-items:center;font-size:40px;font-weight:700}
-.stepper-note{margin:-6px 0 0;font-size:14px;color:var(--ink-2)}
+.stepper output{display:grid;place-items:center;font-size:96px;font-weight:700}
+.stepper-note{margin:-4px 0 0;font-size:15px;color:var(--ink-2)}
 .stepper-note b{font-family:var(--mono)}
-.consent{display:grid;gap:10px;padding-top:14px;border-top:1px dotted var(--rule)}
+.consent{display:grid;gap:10px}
 .link{border:0;background:none;padding:0 0 0 4px;color:var(--ink);text-decoration:underline;text-underline-offset:3px;font-size:13px;cursor:pointer}
 .privacy{font-size:12px;line-height:1.7;color:var(--ink-2);background:var(--wash);padding:10px 12px}
 .privacy p{margin:0}
-.ph{border-bottom:1px dashed var(--muted);color:var(--muted)}
 .alert{font-size:13px;line-height:1.6;color:var(--danger);border-left:3px solid var(--danger);padding:8px 12px;background:var(--wash)}
 
-/* 签到成功 */
-.done-top{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .chip{display:inline-flex;align-items:center;padding:4px 12px;background:var(--ink);color:var(--on-ink);font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.05em;border-radius:12px 12px 0 12px}
-.done-code{font-family:var(--mono);font-size:12px;color:var(--muted)}
-.done-note{margin:-4px 0 0;font-size:13px;color:var(--ink-2)}
-.done-seq{display:flex;align-items:baseline;gap:10px;font-size:15px;font-weight:600;padding-bottom:6px;border-bottom:1px dotted var(--rule)}
-.done-seq b{font-size:72px;line-height:1;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.ascii{margin:0;font-family:var(--mono);font-size:9.5px;line-height:1.08;letter-spacing:0;white-space:pre;overflow:hidden;user-select:none}
+.d-hello{display:grid;gap:4px}
+.d-hello p{margin:0;font-size:14px;color:var(--ink-2)}
+.d-name{margin:0;font-size:40px;line-height:1.15;font-weight:700;overflow-wrap:anywhere}
+.d-note{color:var(--orange)!important;font-weight:600}
+.ascii{margin:0;font-family:var(--mono);font-size:min(12px,calc((100vw - 48px) / 27.6));line-height:1.08;letter-spacing:0;white-space:pre;overflow:hidden;user-select:none}
 .ascii .f{color:#C9C9C9}
 .ascii .t{color:var(--tint)}
 .ascii .k{color:var(--ink)}
-.ticket{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}
-.ticket div{display:grid;gap:2px;min-width:0}
-.ticket dt{font-size:11px;color:var(--muted)}
-.ticket dd{margin:0;font-size:15px;font-weight:600;overflow-wrap:anywhere}
-.live{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--ink)}
-.live .clock{font-size:26px;font-weight:600;letter-spacing:.02em}
+.live{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--ink)}
+.live .clock{font-size:30px;font-weight:600;letter-spacing:.02em}
 .live-label{margin-left:auto;font-size:12px;color:var(--muted)}
 .blink{animation:blink 1s steps(2,start) infinite}
 @keyframes blink{to{visibility:hidden}}
-.done-hint{margin:0;font-size:13px;color:var(--ink-2)}
+@media (max-height:700px){
+  .vx-body{gap:12px;padding-top:14px}
+  .fill-art{flex-basis:64px;min-height:64px}
+  .d-hello + .w-title .w-cn{width:64%}
+  .d-hello + .w-title .w-en{width:80%}
+  .q-title{font-size:28px}
+  .d-name{font-size:32px}
+  .opt{font-size:19px;min-height:56px}
+  .stepper output{font-size:72px}
+}
 
 /* ---------- 后台 ---------- */
 .login{max-width:380px;margin:48px auto;display:grid;gap:16px}
@@ -293,9 +302,9 @@ tr.is-live td{background:#FFF8E1}
           <li data-k="scan">前台扫码，微信或手机相机都能打开</li>
           <li data-k="welcome">欢迎页：展览信息 + 开始签到</li>
           <li data-k="q">5 个问题，一屏一题</li>
-          <li data-k="done">入场凭证：第几位观众 + 走动的时钟</li>
+          <li data-k="done">签到成功页：名字、主视觉、专属图案、走动的时钟</li>
         </ol>
-        <p class="note-sm">同一个手机号一天只记一次。重复扫码或者重复提交，会直接显示原来的凭证。同行的朋友不用再扫码。</p>
+        <p class="note-sm">同一个手机号一天只记一次，重复提交会直接显示签到成功页。同行的朋友不用再扫码。手机打开这个链接时，签到页会铺满整屏。</p>
       </section>
       <section class="note">
         <h2><span class="sq sq-yellow" aria-hidden="true"></span>原型控制</h2>
@@ -331,7 +340,7 @@ const LOADED = Date.now();
 const now = () => SIM_START + (Date.now() - LOADED);   // 演示时钟
 
 const STEPS = [
-  { id: 'name', title: '你的名字', hint: '会显示在入场凭证上', type: 'text', placeholder: '姓名' },
+  { id: 'name', title: '你的名字', hint: '签到成功页上会显示', type: 'text', placeholder: '姓名' },
   { id: 'phone', title: '手机号', hint: '用来确认今天是否已经签到，不会公开', type: 'tel', placeholder: '11 位手机号' },
   { id: 'gender', label: '性别', title: '性别', type: 'radio', options: ['男', '女', '不便透露'] },
   { id: 'age', label: '年龄段', title: '年龄段', type: 'radio', options: ['18 岁以下', '18–25 岁', '26–35 岁', '36–45 岁', '46 岁及以上'], short: ['18 岁以下', '18–25', '26–35', '36–45', '46 岁及以上'] },
@@ -427,25 +436,27 @@ function canNext() {
 }
 function refreshNext() { const b = $('#q-next'); if (b) b.disabled = !canNext(); }
 
-function welcomeHTML() {
-  return `<div class="v">
-    <div class="v-scroll">
-      <div class="w-top">
-        <img class="w-logo" src="assets/vinci-logo.png" alt="VINCI 2026" width="600" height="111">
-        <div class="w-gallery"><span class="w-tri" aria-hidden="true"></span><b>艺术与媒体画廊</b><span>ART &amp; MEDIA GALLERY</span></div>
-      </div>
-      <div class="w-title">
-        <img class="w-cn" src="assets/kv-title-cn.png" alt="无界未来" width="999" height="236">
-        <img class="w-en" src="assets/kv-title-en.png" alt="FUTURES UNBOUND" width="1829" height="129">
-        <p class="w-sub">Visualizing Tech, Culture, and Connection in an AI- and Robot-Driven World</p>
-      </div>
-      <img class="w-art" src="assets/kv-art.webp" alt="" width="1500" height="920">
-      <p class="w-meta"><span class="sq sq-green" aria-hidden="true"></span>2026.11.1–11.15 / 杭州 HANGZHOU</p>
-      <p class="w-intro">欢迎来到第 19 届 VINCI 艺术与媒体画廊。签到一共 5 个小问题，大约 30 秒。</p>
-    </div>
-    <div class="v-foot"><button type="button" class="btn-next btn-wide" data-act="start">开始签到 →</button></div>
-    <div class="strip" aria-hidden="true"></div>
+// 满版：每一屏 = 顶栏 + 铺满的内容 + 底部按钮 + 条纹
+const LOGO = '<img class="vx-logo" src="assets/vinci-logo.png" alt="VINCI 2026" width="600" height="111">';
+const KV_TITLE = `<div class="w-title">
+    <img class="w-cn" src="assets/kv-title-cn.png" alt="无界未来" width="999" height="236">
+    <img class="w-en" src="assets/kv-title-en.png" alt="FUTURES UNBOUND" width="1829" height="129">
+    <p class="w-sub">Visualizing Tech, Culture, and Connection in an AI- and Robot-Driven World</p>
   </div>`;
+const KV_ART = '<div class="fill-art bleed" aria-hidden="true"><img src="assets/kv-art.webp" alt="" width="1500" height="920"></div>';
+const EXPO_LINE = '<p class="w-meta"><span class="sq sq-green" aria-hidden="true"></span>2026.11.1–11.15 / 杭州 HANGZHOU</p>';
+const frame = (head, body, foot) => `<div class="vx"><div class="vx-panel">
+    <header class="vx-head">${head}</header>
+    <div class="vx-body">${body}</div>
+    ${foot ? `<div class="vx-foot">${foot}</div>` : ''}
+    <div class="strip" aria-hidden="true"></div>
+  </div></div>`;
+
+function welcomeHTML() {
+  return frame(
+    `${LOGO}<div class="w-gallery"><span class="w-tri" aria-hidden="true"></span><b>艺术与媒体画廊</b><span>ART &amp; MEDIA GALLERY</span></div>`,
+    `${KV_TITLE}${KV_ART}<h1 class="w-hello">观众签到</h1>${EXPO_LINE}<p class="w-intro">欢迎来到第 19 届 VINCI 艺术与媒体画廊。签到一共 5 个小问题，大约 30 秒。</p>`,
+    '<button type="button" class="btn-next btn-wide" data-act="start">开始签到 →</button>');
 }
 
 function questionHTML() {
@@ -461,49 +472,39 @@ function questionHTML() {
   } else {
     const tel = st.type === 'tel';
     field = `<input class="field-input" id="q-input" type="${tel ? 'tel' : 'text'}" ${tel ? 'inputmode="numeric" maxlength="11" autocomplete="tel"' : 'maxlength="20" autocomplete="name"'} placeholder="${st.placeholder}" value="${esc(val || '')}" aria-labelledby="q-title" aria-describedby="q-err">
-      <p class="field-err" id="q-err" ${tel && V.phoneErr ? '' : 'hidden'}>${V.phoneErr}</p>`;
+      <p class="field-err" id="q-err" ${tel && V.phoneErr ? '' : 'hidden'}>${V.phoneErr}</p>${KV_ART}`;
   }
   const consent = last ? `<div class="consent">
       <label class="check"><input type="checkbox" id="q-consent" ${V.consent ? 'checked' : ''}><span>我同意主办方收集以上信息，用于观展签到和人数统计。<button type="button" class="link" data-act="more" aria-expanded="${V.more}">${V.more ? '收起说明' : '查看说明'}</button></span></label>
       ${V.more ? `<div class="privacy"><p>收集内容：姓名、手机号、性别、年龄段、同行人数。</p><p>用途：观众签到、统计观展人数。只在主办方内部使用，不提供给第三方。</p><p>保存期限：3 个月，到期自动删除。</p></div>` : ''}
     </div>` : '';
   const label = V.submitting ? '提交中…' : last ? (V.error ? '重新提交' : '提交签到') : '下一步';
-  return `<div class="v">
-    <div class="q-top"><div class="q-progress" aria-hidden="true">${STEPS.map((_, k) => `<i class="${k <= V.i ? 'on' : ''}"></i>`).join('')}</div></div>
-    <div class="v-scroll">
-      <p class="q-num"><span class="sq sq-${MARKS[V.i % 4]}" aria-hidden="true"></span>${pad(V.i + 1)} / ${pad(n)}</p>
-      <h2 class="q-title" id="q-title">${st.title}</h2>
+  return frame(
+    `${LOGO}<span class="q-num"><span class="sq sq-${MARKS[V.i % 4]}" aria-hidden="true"></span>${pad(V.i + 1)} / ${pad(n)}</span>`,
+    `<div class="q-progress" aria-hidden="true">${STEPS.map((_, k) => `<i class="${k <= V.i ? 'on' : ''}"></i>`).join('')}</div>
+      <h1 class="q-title" id="q-title">${st.title}</h1>
       ${st.hint ? `<p class="q-hint">${st.hint}</p>` : ''}
       ${field}
       ${consent}
-      ${V.error ? `<div class="alert" role="alert">${V.error}</div>` : ''}
-    </div>
-    <div class="v-foot">
-      <button type="button" class="btn-ghost" data-act="back">← 上一步</button>
-      <button type="button" class="btn-next" id="q-next" data-act="${last ? 'submit' : 'next'}" ${canNext() ? '' : 'disabled'}>${label}</button>
-    </div>
-  </div>`;
+      ${V.error ? `<div class="alert" role="alert">${V.error}</div>` : ''}`,
+    `<button type="button" class="btn-ghost" data-act="back">← 上一步</button>
+      <button type="button" class="btn-next" id="q-next" data-act="${last ? 'submit' : 'next'}" ${canNext() ? '' : 'disabled'}>${label}</button>`);
 }
 
+// 签到成功页：不显示人数和编号
 function doneHTML() {
   const r = V.rec;
-  return `<div class="v">
-    <div class="v-scroll">
-      <div class="done-top"><span class="chip">${V.already ? '今天已签到' : '签到成功'}</span><span class="done-code">${code(r)}</span></div>
-      ${V.already ? `<p class="done-note">这个手机号今天 ${hm(r.ts)} 已经签到过了，下面是你的入场凭证。</p>` : ''}
-      <div class="done-seq"><span>今天第</span><b>${r.seq}</b><span>位观众</span></div>
+  return frame(
+    `${LOGO}<span class="chip">签到成功</span>`,
+    `<div class="d-hello">
+        <h1 class="d-name">${esc(r.name)}</h1>
+        <p>欢迎来到第 19 届 VINCI 艺术与媒体画廊。</p>
+        ${V.already ? '<p class="d-note">这个手机号今天已经签过到了，不用再填。</p>' : ''}
+      </div>
+      ${KV_TITLE}${KV_ART}
       <pre class="ascii" id="ascii" aria-hidden="true"></pre>
-      <dl class="ticket">
-        <div><dt>姓名</dt><dd>${esc(r.name)}</dd></div>
-        <div><dt>日期</dt><dd>${cnDate(r.day)}</dd></div>
-        <div><dt>签到时间</dt><dd class="mono">${hm(r.ts)}</dd></div>
-        <div><dt>到访人数</dt><dd>${r.companions ? `${r.companions + 1} 人（含同行 ${r.companions} 位）` : '1 人'}</dd></div>
-      </dl>
       <div class="live"><span class="sq sq-orange blink" aria-hidden="true"></span><span class="clock mono" id="v-clock">${hms(now())}</span><span class="live-label">实时</span></div>
-      <p class="done-hint">入场时把这个页面给工作人员看一眼。时钟一直在走，说明不是截图。</p>
-    </div>
-    <div class="strip" aria-hidden="true"></div>
-  </div>`;
+      ${EXPO_LINE}`);
 }
 
 // 每个人的专属 ASCII 图案：用签到编号播种，同一个人每次打开都一样
@@ -538,6 +539,7 @@ function renderVisitor() {
   s.innerHTML = (V.screen === 'welcome' ? welcomeHTML() : V.screen === 'q' ? questionHTML() : doneHTML())
     + '<div class="v-toast" id="v-toast" role="status" aria-live="polite" hidden></div>';
   if (V.screen === 'done') drawAscii();
+  if (s.dataset.view !== V.screen + V.i) { s.scrollTop = 0; s.dataset.view = V.screen + V.i; }
   $$('#flow li').forEach(li => { if (li.dataset.k === V.screen) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current'); });
 }
 function goStep(i) {

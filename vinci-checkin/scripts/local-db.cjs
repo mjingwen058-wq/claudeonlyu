@@ -9,8 +9,17 @@ function db() {
   if (!dbPromise) {
     dbPromise = import("@electric-sql/pglite").then(async ({ PGlite }) => {
       const dir = process.env.VINCI_LOCAL_DATA;
-      if (dir) fs.mkdirSync(dir, { recursive: true });
-      const pg = dir ? new PGlite(dir) : new PGlite();
+      if (dir) {
+        try {
+          fs.mkdirSync(dir, { recursive: true });
+          const pg = new PGlite(dir);
+          await pg.waitReady;
+          return pg;
+        } catch (e) {
+          console.warn(`\n  试用数据没法存到 ${dir}（${e.message}），这次先存在内存里，关掉窗口后会清空。\n`);
+        }
+      }
+      const pg = new PGlite();
       await pg.waitReady;
       return pg;
     });
